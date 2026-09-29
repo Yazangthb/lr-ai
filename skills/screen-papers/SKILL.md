@@ -33,6 +33,10 @@ Keep track of what you tightened for the final report.
 Papers the user added (`seed.papers`, `add`) are never filtered out.
 
 ## 2. Screening with subagents
+If the request adds or changes criteria, update `inclusion_criteria` / `exclusion_criteria` in `config.yaml`
+first. The batch files carry them to the screeners. To re-screen papers that were already screened, run
+`batches` with `--force`.
+
 1. Run `lr.py batches --stage screen`. It writes batch files of `screening.batch_size` (default 25) papers
    each and prints their paths.
 2. Launch one `lr-ai:paper-screener` subagent per batch file, in parallel. Send them in a single message,

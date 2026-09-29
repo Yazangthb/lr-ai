@@ -17,6 +17,11 @@ Automatic by default: make the choices below yourself and keep going. Lines mark
 in step-by-step mode (the user asked to confirm steps, e.g. `/lr-ai:lit-review --step`): there, stop and
 wait for the user's reply.
 
+## No run yet
+If the user just names papers to expand (DOIs, arXiv ids or titles), create a run first:
+`lr.py init "<topic>" --name <short-name>`, then `lr.py add --run <dir> <paper> <paper> ...`. Papers added
+this way are never filtered out.
+
 ## Round 1 (usually enough)
 1. Run `lr.py filter` first, so papers outside the year range or excluded types are not expanded.
 2. Adjust `snowball.max_references` and `max_citations` if needed. Both keep the most-cited papers first.
