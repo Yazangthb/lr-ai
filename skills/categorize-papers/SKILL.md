@@ -5,7 +5,7 @@ description: Build a two-level taxonomy for the included papers of a literature 
 
 # Taxonomy and summaries (step 5)
 
-CLI: `python "${CLAUDE_PLUGIN_ROOT}/scripts/lr.py" <command> --run <run dir>` (see `${CLAUDE_PLUGIN_ROOT}/docs/cli.md`). If `${CLAUDE_PLUGIN_ROOT}` shows up unexpanded, the plugin root is two folders above this skill's base directory.
+CLI: `python "${CLAUDE_PLUGIN_ROOT}/scripts/lr.py" <command> --run <run dir>` (see `${CLAUDE_PLUGIN_ROOT}/docs/cli.md`). If the path still contains a `$` placeholder, the plugin root is two folders above this skill's base directory.
 
 ## 1. Propose a taxonomy
 Read the included papers compactly:

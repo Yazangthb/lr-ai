@@ -5,7 +5,7 @@ description: Run boolean keyword searches for a literature review across scholar
 
 # Database keyword search (step 2)
 
-CLI: `python "${CLAUDE_PLUGIN_ROOT}/scripts/lr.py" <command> --run <run dir>` (see `${CLAUDE_PLUGIN_ROOT}/docs/cli.md`). If `${CLAUDE_PLUGIN_ROOT}` shows up unexpanded, the plugin root is two folders above this skill's base directory.
+CLI: `python "${CLAUDE_PLUGIN_ROOT}/scripts/lr.py" <command> --run <run dir>` (see `${CLAUDE_PLUGIN_ROOT}/docs/cli.md`). If the path still contains a `$` placeholder, the plugin root is two folders above this skill's base directory.
 
 ## 1. Build the queries
 Read `config.yaml` (topic, RQs, criteria) and a sample of the seed papers

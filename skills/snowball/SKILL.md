@@ -5,7 +5,7 @@ description: Forward and backward citation snowballing for a literature review -
 
 # Snowballing (step 3)
 
-CLI: `python "${CLAUDE_PLUGIN_ROOT}/scripts/lr.py" <command> --run <run dir>` (see `${CLAUDE_PLUGIN_ROOT}/docs/cli.md`). If `${CLAUDE_PLUGIN_ROOT}` shows up unexpanded, the plugin root is two folders above this skill's base directory.
+CLI: `python "${CLAUDE_PLUGIN_ROOT}/scripts/lr.py" <command> --run <run dir>` (see `${CLAUDE_PLUGIN_ROOT}/docs/cli.md`). If the path still contains a `$` placeholder, the plugin root is two folders above this skill's base directory.
 
 ## Round 1 (usually enough)
 1. Run `lr.py filter` first, so papers outside the year range or excluded types are not expanded.

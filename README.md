@@ -82,6 +82,7 @@ Or use the steps on their own. The skills trigger from plain requests like "snow
 
 | Skill | Step |
 |---|---|
+| `lr-ai:setup` | health check ("run the LR-AI doctor"), dependencies, API keys |
 | `lr-ai:seed-search` | set up the review, seed papers |
 | `lr-ai:database-search` | boolean keyword search |
 | `lr-ai:snowball` | forward/backward snowballing |

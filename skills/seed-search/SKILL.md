@@ -5,7 +5,7 @@ description: Start a literature review - set up the review (topic, research ques
 
 # Seed search (step 1)
 
-CLI: `python "${CLAUDE_PLUGIN_ROOT}/scripts/lr.py"` (use `python3` if `python` is not Python 3). If `${CLAUDE_PLUGIN_ROOT}` shows up unexpanded, the plugin root is two folders above this skill's base directory.
+CLI: `python "${CLAUDE_PLUGIN_ROOT}/scripts/lr.py"` (use `python3` if `python` is not Python 3). If the path still contains a `$` placeholder, the plugin root is two folders above this skill's base directory.
 Reference: `${CLAUDE_PLUGIN_ROOT}/docs/cli.md`. Always pass `--run <run dir>` once a run exists.
 
 ## 1. Check the environment (once per session)

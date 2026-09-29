@@ -5,7 +5,7 @@ description: Filter and screen literature-review candidates - apply deterministi
 
 # Filtering and screening (step 4)
 
-CLI: `python "${CLAUDE_PLUGIN_ROOT}/scripts/lr.py" <command> --run <run dir>` (see `${CLAUDE_PLUGIN_ROOT}/docs/cli.md`). If `${CLAUDE_PLUGIN_ROOT}` shows up unexpanded, the plugin root is two folders above this skill's base directory.
+CLI: `python "${CLAUDE_PLUGIN_ROOT}/scripts/lr.py" <command> --run <run dir>` (see `${CLAUDE_PLUGIN_ROOT}/docs/cli.md`). If the path still contains a `$` placeholder, the plugin root is two folders above this skill's base directory.
 
 ## 1. Deterministic filters
 Run `lr.py filter`. It recomputes `excluded_reason` from `config.yaml` `filters` every time. Review

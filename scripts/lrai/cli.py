@@ -577,3 +577,7 @@ def main(argv: list[str] | None = None) -> int:
         info("Interrupted. Completed API calls are cached; re-run the command to resume.")
         return 130
     return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
