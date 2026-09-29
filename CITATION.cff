@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+message: "If you use LR-AI in your research, please cite it as below."
+title: "LR-AI: Automated literature reviews with Claude Code"
+type: software
+version: 0.1.0
+date-released: 2026-09-29
+license: MIT
+repository-code: "https://github.com/YAZANGTHB/lr-ai"
+url: "https://github.com/YAZANGTHB/lr-ai"
+authors:
+  - family-names: Alnakri
+    given-names: Yazan
+keywords:
+  - literature review
+  - systematic review
+  - snowballing
+  - research automation

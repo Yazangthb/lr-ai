@@ -1,0 +1,63 @@
+# Example LR-AI configuration (a small review, used in the README).
+# Every `lr.py` command reads this file; edit it freely.
+# Boolean query syntax (search.queries): ("phrase one" OR "phrase two") AND (term* OR other) NOT excluded
+
+topic: "Forecasting scientific impact with citation graphs"
+created: "2026-09-29"
+
+research_questions:
+  - id: RQ1
+    text: "How can citation-graph structure be used to forecast the future impact of papers?"
+
+inclusion_criteria:
+  - "Proposes or evaluates a method that predicts citation counts or impact using citation-network information"
+exclusion_criteria:
+  - "Pure bibliometric descriptions without any prediction"
+
+seed:
+  queries: ["predicting citation counts with citation network features", "graph neural networks for scientific impact prediction"]  # natural-language queries, Semantic Scholar, falling back to OpenAlex / arXiv
+  per_query: 20
+  papers: ["10.1126/science.1237825", "arXiv:2009.02647"]  # papers you already know: DOIs, arXiv ids, or exact titles
+
+search:
+  sources: [openalex, semantic_scholar, arxiv]
+  queries: ['("citation network" OR "citation graph") AND (forecast* OR predict*) AND (impact OR citation*)']  # boolean keyword queries, translated for each database
+  per_query: 100      # results kept per query per source (most relevant first)
+
+snowball:
+  rounds: 1
+  direction: both      # backward | forward | both
+  backend: auto        # auto (OpenAlex, falls back to Semantic Scholar) | openalex | semantic_scholar
+  from: all            # all = every start-set paper; included = only papers screened core/skim
+  max_references: 200  # per paper, most-cited first (null = all)
+  max_citations: 50    # per paper, most-cited first
+
+filters:
+  year_min: 2015
+  year_max: null
+  languages: [en]      # papers with unknown language are kept
+  min_citations: 0
+  citation_grace_years: 2   # papers younger than this are exempt from min_citations
+  require_abstract: false
+  exclude_types: [erratum, editorial, retraction, paratext, letter, peer-review, supplementary-materials]
+  require_any: ["citation*", "scientific impact", "bibliometric*"]      # keep only papers whose title/abstract mentions one of these (supports prefix*)
+  exclude_any: []      # drop papers whose title/abstract mentions any of these
+  venue_exclude: []
+  min_hits: 0          # snowballed papers must be linked from at least this many papers
+
+screening:
+  batch_size: 25       # papers per screening subagent
+
+taxonomy:
+  - name: "Graph-Based Impact Forecasting (RQ1)"
+    rq: RQ1
+    children: ["Graph neural networks", "Network-structure features", "Temporal / dynamic graphs"]
+  - name: "Feature-Based & Statistical Prediction"
+    rq: RQ1
+    children: ["Machine-learning regressors", "Citation-dynamics models"]
+  - name: "Related Scientometrics & Background"
+    children: ["Citation network analysis", "Other"]
+
+export:
+  title: null          # Google Sheet title (default: "LR — <topic>")
+  columns: null        # null = all columns, or a list of column keys to keep

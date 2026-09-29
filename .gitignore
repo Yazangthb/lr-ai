@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+*.tmp
+
+# review runs contain API caches and personal notes; commit them deliberately if you want to share one
+lr-runs/

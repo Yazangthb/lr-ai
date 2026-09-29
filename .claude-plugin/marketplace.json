@@ -1,0 +1,17 @@
+{
+  "name": "lr-ai",
+  "owner": {
+    "name": "Yazan Alnakri"
+  },
+  "metadata": {
+    "description": "LR-AI: literature review automation for Claude Code (search, snowballing, screening, Google Sheets export)."
+  },
+  "plugins": [
+    {
+      "name": "lr-ai",
+      "source": "./",
+      "description": "Automated literature reviews: seed search, database search, snowballing, screening and a categorized Google Sheet.",
+      "version": "0.1.0"
+    }
+  ]
+}
