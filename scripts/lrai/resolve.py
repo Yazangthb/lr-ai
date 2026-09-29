@@ -62,7 +62,12 @@ def _match_title(title: str) -> tuple[Paper | None, str]:
 def resolve(items: list, tag: str) -> tuple[list[Paper], list[str]]:
     """-> (papers with found_via=[tag], errors). OpenAlex first (free lookups), then Semantic Scholar."""
     errors: list[str] = []
-    ids = [classify(i) for i in items]
+    ids = []
+    for item in items:
+        if isinstance(item, str):
+            ids.append(classify(item))
+        else:  # YAML reads an unquoted 2101.00010 as the number 2101.0001, i.e. a different paper
+            errors.append(f"{item!r} is not text: put DOIs and arXiv ids in quotes in config.yaml")
     found: list[Paper] = []
     remaining: list[tuple[str, str]] = []
     oa_error = ""

@@ -45,6 +45,15 @@ def merge_two(a: Paper, b: Paper) -> Paper:
     m.found_via = list(dict.fromkeys(list(a.found_via) + list(b.found_via)))
     m.round = min(a.round, b.round)
     m.extra = {**other.extra, **primary.extra}
+    # manual edits (`lr.py set`) always win, whichever record they were made on
+    manual_primary = set(primary.extra.get("manual") or [])
+    manual_other = set(other.extra.get("manual") or [])
+    for name in manual_other - manual_primary:
+        setattr(m, name, getattr(other, name))
+        if name == "status" and "status_reason" not in manual_primary:
+            m.status_reason = other.status_reason
+    if manual_primary or manual_other:
+        m.extra["manual"] = sorted(manual_primary | manual_other)
     return m.normalize()
 
 

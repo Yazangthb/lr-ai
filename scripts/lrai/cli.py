@@ -28,7 +28,7 @@ OPENALEX_KEY_HINT = ("OpenAlex refused an anonymous request. Get a free API key 
 # ---------------------------------------------------------------- helpers
 
 def _latest_run(root: str = "lr-runs") -> str | None:
-    runs = [d for d in glob.glob(os.path.join(root, "*")) if os.path.isfile(os.path.join(d, "config.yaml"))]
+    runs = [d for d in glob.glob(os.path.join(glob.escape(root), "*")) if os.path.isfile(os.path.join(d, "config.yaml"))]
     return max(runs, key=os.path.getmtime) if runs else None
 
 
@@ -40,7 +40,7 @@ def _run(args) -> Run:
 
 
 def _seq(run: Run, prefix: str) -> int:
-    return len(glob.glob(run.file("raw", prefix + "*.jsonl"))) + 1
+    return len(glob.glob(os.path.join(glob.escape(run.file("raw")), prefix + "*.jsonl"))) + 1
 
 
 def _field(p: Paper, name: str):

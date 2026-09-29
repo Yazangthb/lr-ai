@@ -41,7 +41,7 @@ def _compact(p: Paper, stage: str) -> dict:
 
 
 def _batch_files(folder: str) -> list[str]:
-    return sorted(f for f in glob.glob(os.path.join(folder, "batch_*.jsonl")) if not f.endswith(".result.jsonl"))
+    return sorted(f for f in glob.glob(os.path.join(glob.escape(folder), "batch_*.jsonl")) if not f.endswith(".result.jsonl"))
 
 
 def write_batches(run, stage: str, papers: list[Paper], size: int) -> list[str]:
@@ -70,6 +70,15 @@ def write_batches(run, stage: str, papers: list[Paper], size: int) -> list[str]:
     return paths
 
 
+def _text(v) -> str:
+    """Result values should be strings, but tolerate lists and numbers from a creative model."""
+    if v is None:
+        return ""
+    if isinstance(v, (list, tuple)):
+        return "; ".join(str(x) for x in v).strip()
+    return str(v).strip()
+
+
 def _num(v) -> float | None:
     try:
         return max(0.0, min(1.0, float(v)))
@@ -93,16 +102,16 @@ def _apply_one(p: Paper, r: dict, stage: str, firsts: list[str], problems: list[
             problems.append(f"{p.id}: invalid status {r.get('status')!r}")
             return False
         put("status", status)
-        put("status_reason", (r.get("reason") or "").strip() or None)
+        put("status_reason", _text(r.get("reason")) or None)
         put("relevance", _num(r.get("relevance")))
-        put("short_summary", (r.get("short_summary") or "").strip() or p.short_summary)
+        put("short_summary", _text(r.get("short_summary")) or p.short_summary)
         return True
-    if not r.get("summary"):
+    if not _text(r.get("summary")):
         problems.append(f"{p.id}: result has no summary")
         return False
     for name in ("summary", "rq_relation", "first_level", "second_level", "code", "short_summary"):
-        if r.get(name) not in (None, ""):
-            put(name, str(r[name]).strip())
+        if _text(r.get(name)):
+            put(name, _text(r[name]))
     prio = str(r.get("priority", "")).strip().lower()
     if prio:
         if prio in PRIORITIES:
@@ -141,7 +150,7 @@ def apply_results(run, stage: str, papers: list[Paper], replay_all: bool = False
               "state": dict(state)}
     for batch in _batch_files(folder):
         result_path = batch[: -len(".jsonl")] + ".result.jsonl"
-        with open(batch, encoding="utf-8") as f:
+        with open(batch, encoding="utf-8-sig") as f:
             wanted = [json.loads(line)["id"] for line in f if line.strip() and '"_meta"' not in line[:12]]
         got = set()
         name = os.path.basename(result_path)
@@ -151,7 +160,7 @@ def apply_results(run, stage: str, papers: list[Paper], replay_all: bool = False
             if state.get(name) != signature:
                 report["files"] += 1
                 report["state"][name] = signature
-                with open(result_path, encoding="utf-8") as f:
+                with open(result_path, encoding="utf-8-sig") as f:  # tolerate a BOM (Notepad, PowerShell)
                     for n, line in enumerate(f, 1):
                         line = line.strip().rstrip(",")
                         if not line or line in ("[", "]"):

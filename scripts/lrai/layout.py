@@ -249,7 +249,8 @@ def method_tab(cfg: dict, stats: dict) -> Tab:
         ("Database queries", _lines(cfg["search"].get("queries"))),
         ("Databases", ", ".join(cfg["search"].get("sources") or [])),
         ("Snowballing", f"{sb.get('rounds', 1)} round(s), {sb.get('direction')}; up to "
-                        f"{sb.get('max_references') or 'all'} references and {sb.get('max_citations')} citing "
+                        f"{sb.get('max_references') or 'all'} references and "
+                        f"{'all' if sb.get('max_citations') is None else sb.get('max_citations')} citing "
                         f"papers per paper (most cited first)"),
         ("Automatic filters", _filters_text(cfg["filters"])),
         ("Screening", "Title/abstract screening by an LLM against the criteria above; "

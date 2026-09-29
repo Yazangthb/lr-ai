@@ -22,7 +22,7 @@ def identified(run) -> Counter:
     """Distinct records returned per provenance kind (seed, openalex, backward, ...), before cross-source
     de-duplication. Re-running a step does not inflate the counts."""
     seen: dict[str, set] = {}
-    for path in sorted(glob.glob(os.path.join(run.file("raw"), "*.jsonl"))):
+    for path in sorted(glob.glob(os.path.join(glob.escape(run.file("raw")), "*.jsonl"))):
         for p in read_jsonl(path):
             kinds = p.found_kinds
             seen.setdefault(kinds[0] if kinds else "manual", set()).add(p.id)

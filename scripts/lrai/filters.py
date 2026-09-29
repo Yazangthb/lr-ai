@@ -19,7 +19,8 @@ def _term_regex(term: str) -> re.Pattern:
     prefix = term.endswith("*")
     words = [re.escape(w) for w in term.rstrip("*").split()]
     body = r"[\s-]+".join(words)
-    return re.compile(r"\b" + body + (r"\w*" if prefix else r"(?:s|es)?\b"), re.I)
+    # lookarounds instead of \b, so terms that start or end with symbols ("c++", "C#", ".NET") still match
+    return re.compile(r"(?<!\w)" + body + (r"\w*" if prefix else r"(?:s|es)?(?!\w)"), re.I)
 
 
 def compile_terms(terms) -> list[tuple[str, re.Pattern]]:

@@ -74,11 +74,18 @@ def search(query: str, limit: int = 100, year_min: int | None = None,
         n = min(100, limit - len(out))
         params = {"search_query": search_query, "start": start, "max_results": n,
                   "sortBy": "relevance", "sortOrder": "descending"}
-        for attempt in range(3):  # the API occasionally returns empty or short pages; retry those
+        batch: list[Paper] = []
+        for attempt in range(3):  # the API occasionally returns empty, short or unreadable pages; retry those
             text = request(API, params, min_interval=MIN_INTERVAL, refresh=attempt > 0,
                            cache_check=_complete_page(start, n))
-            batch = parse_feed(text)
-            total = total_results(text) if total is None else total
+            try:
+                batch = parse_feed(text)
+                total = total_results(text) if total is None else total
+            except ET.ParseError:
+                if attempt == 2:
+                    raise HttpError(None, f"arXiv returned an unreadable response: {text[:120]!r}") from None
+                time.sleep(MIN_INTERVAL)
+                continue
             if len(batch) >= _expected(total, start, n):
                 break
             time.sleep(MIN_INTERVAL)

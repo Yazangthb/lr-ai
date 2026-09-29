@@ -51,7 +51,7 @@ exclusion_criteria: []
 seed:
   queries: []          # natural-language queries (Semantic Scholar, falling back to OpenAlex / arXiv)
   per_query: 20
-  papers: []           # papers you already know: DOIs, arXiv ids, or exact titles
+  papers: []           # papers you already know, in quotes: "10.1126/science.1237825", "2401.01234", or exact titles
 
 search:
   sources: [openalex, semantic_scholar, arxiv]
@@ -100,6 +100,8 @@ def _merge(base: dict, override: dict) -> dict:
             out[k] = _merge(out[k], v)
         elif v is None and isinstance(out.get(k), (list, dict)):
             continue  # `key:` left empty in YAML -> keep the default list/section
+        elif isinstance(out.get(k), list) and isinstance(v, (str, int, float)) and not isinstance(v, bool):
+            out[k] = [v]  # `languages: en` means [en], not ['e', 'n']
         else:
             out[k] = v
     return out

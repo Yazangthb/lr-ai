@@ -79,13 +79,31 @@ def test_persistent_openalex_error_disables_it_for_the_round(monkeypatch):
 
     def failing(p):
         calls.append(p)
-        raise HttpError(503, "api key required")
+        raise HttpError(503, "use a free API key", persistent=True)
 
     monkeypatch.setattr(snowball.openalex, "resolve", failing)
     monkeypatch.setattr(snowball.s2, "references", lambda p, cap=1000: refs(1))
     monkeypatch.setattr(snowball.s2, "citations", lambda p, cap=1000: [])
     found, stats = snowball.snowball_round([paper(doi="10.1/a"), paper(doi="10.1/b")], 1, max_cites=5)
     assert len(calls) == 1 and len(found) == 2 and stats["errors"]
+
+
+def test_transient_rate_limit_does_not_disable_openalex_immediately(monkeypatch):
+    calls = []
+
+    def flaky(p):
+        calls.append(p)
+        if len(calls) == 1:
+            raise HttpError(429, "Please retry in 37s, or use a free API key")
+        return {"id": "W1", "referenced_works": []}
+
+    monkeypatch.setattr(snowball.openalex, "resolve", flaky)
+    monkeypatch.setattr(snowball.openalex, "get_works", lambda ids: [])
+    monkeypatch.setattr(snowball.openalex, "cited_by", lambda wid, limit: refs(1, "c"))
+    monkeypatch.setattr(snowball.s2, "references", lambda p, cap=1000: [])
+    monkeypatch.setattr(snowball.s2, "citations", lambda p, cap=1000: [])
+    snowball.snowball_round([paper(doi="10.1/a"), paper(doi="10.1/b")], 1, max_cites=5)
+    assert len(calls) == 2  # still asked OpenAlex for the second paper
 
 
 def test_transient_errors_are_reported_as_failed_not_unresolved(monkeypatch):

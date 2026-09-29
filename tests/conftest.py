@@ -9,6 +9,8 @@ from lrai import http  # noqa: E402
 from lrai.config import render_template  # noqa: E402
 from lrai.models import Paper  # noqa: E402
 
+REAL_REQUEST = http.request  # for tests that drive the HTTP layer against a fake urlopen
+
 
 @pytest.fixture(autouse=True)
 def no_network(monkeypatch):

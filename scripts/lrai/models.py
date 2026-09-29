@@ -16,9 +16,17 @@ PRIORITIES = ("high", "medium", "low")
 
 _DOI_PREFIX = re.compile(r"^\s*(?:(?:https?://)?(?:dx\.)?doi\.org/|doi:\s*)", re.I)
 _ARXIV_DOI = re.compile(r"^10\.48550/arxiv\.(.+)$", re.I)
-_ARXIV_URL = re.compile(r"arxiv\.org/(?:abs|pdf)/(.+?)(?:\.pdf)?/?(?:[?#].*)?$", re.I)
+_ARXIV_URL = re.compile(r"arxiv\.org/(?:abs|pdf|html)/(.+?)(?:\.pdf)?/?(?:[?#].*)?$", re.I)
 _ARXIV_VERSION = re.compile(r"v\d+$", re.I)
-_MARKUP = re.compile(r"</?(?:i|b|u|em|strong|sub|sup|scp|span|p|jats:[a-z-]+)(?:\s[^>]*)?>", re.I)
+_ARXIV_ID = re.compile(r"^(?:\d{4}\.\d{4,5}|[a-z-]+(?:\.[a-z]{2})?/\d{7})$", re.I)
+# HTML/JATS tags only: attributes must look like name="value", so math such as "a<b and c>d" survives
+_MARKUP = re.compile(r"</?(?:i|b|u|em|strong|sub|sup|scp|span|p|jats:[a-z-]+)"
+                     r"(?:\s+[a-z:-]+=(?:\"[^\"]*\"|'[^']*'))*\s*/?>", re.I)
+
+
+def clean_text(s: str) -> str:
+    """Repair lone UTF-16 surrogates (they arrive via JSON escapes) so the text can be written as UTF-8."""
+    return s.encode("utf-16", "surrogatepass").decode("utf-16", "replace")
 
 
 def norm_doi(doi: str | None) -> str | None:
@@ -38,14 +46,14 @@ def norm_arxiv(aid: str | None) -> str | None:
         a = m.group(1)
     a = re.sub(r"^arxiv:\s*", "", a, flags=re.I)
     a = _ARXIV_VERSION.sub("", a)
-    return a or None
+    return a if _ARXIV_ID.match(a) else None
 
 
 def norm_title(title: str | None) -> str:
     t = unicodedata.normalize("NFKD", title or "")
     t = "".join(c for c in t if not unicodedata.combining(c))
-    t = re.sub(r"<[^>]+>", " ", t)  # stray markup like <i>...</i>
-    t = re.sub(r"[^a-z0-9]+", " ", t.lower())
+    t = _MARKUP.sub(" ", t)
+    t = re.sub(r"[\W_]+", " ", t.lower())  # keeps letters of every script, not just a-z
     return " ".join(t.split())
 
 
@@ -84,9 +92,9 @@ class Paper:
     extra: dict = field(default_factory=dict)
 
     def normalize(self) -> "Paper":
-        self.title = " ".join(_MARKUP.sub("", html.unescape(self.title or "")).split())
+        self.title = " ".join(_MARKUP.sub("", html.unescape(clean_text(self.title or ""))).split())
         if self.venue:
-            self.venue = " ".join(html.unescape(self.venue).split()) or None
+            self.venue = " ".join(html.unescape(clean_text(str(self.venue))).split()) or None
         doi = norm_doi(self.doi)
         m = _ARXIV_DOI.match(doi or "")
         if m:  # arXiv's own DOIs just duplicate the arXiv id
@@ -99,8 +107,8 @@ class Paper:
         if isinstance(self.year, str):
             self.year = int(self.year) if self.year.isdigit() else None
         if self.abstract:
-            self.abstract = " ".join(_MARKUP.sub("", html.unescape(self.abstract)).split()) or None
-        self.authors = [a for a in (self.authors or []) if a]
+            self.abstract = " ".join(_MARKUP.sub("", html.unescape(clean_text(str(self.abstract)))).split()) or None
+        self.authors = [clean_text(str(a)) for a in (self.authors or []) if a]
         return self
 
     @property
@@ -113,7 +121,8 @@ class Paper:
             return "openalex:" + self.openalex_id
         if self.s2_id:
             return "s2:" + self.s2_id
-        return "title:" + hashlib.sha1(norm_title(self.title).encode()).hexdigest()[:12]
+        key = norm_title(self.title) or self.title.casefold().strip()
+        return "title:" + hashlib.sha1(key.encode("utf-8", "replace")).hexdigest()[:12]
 
     def dedup_keys(self) -> list[str]:
         keys = []
@@ -184,7 +193,7 @@ class Paper:
 
 def read_jsonl(path: str) -> list[Paper]:
     papers = []
-    with open(path, encoding="utf-8") as f:
+    with open(path, encoding="utf-8-sig") as f:
         for n, line in enumerate(f, 1):
             line = line.strip()
             if not line:
@@ -199,7 +208,7 @@ def read_jsonl(path: str) -> list[Paper]:
 
 
 def read_meta(path: str) -> dict:
-    with open(path, encoding="utf-8") as f:
+    with open(path, encoding="utf-8-sig") as f:
         first = f.readline().strip()
     if first:
         d = json.loads(first)
@@ -212,7 +221,7 @@ def write_jsonl(path: str, papers, meta: dict | None = None) -> None:
     """Atomic write: never leaves a half-written file behind if interrupted."""
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+    with open(tmp, "w", encoding="utf-8", errors="replace", newline="\n") as f:
         if meta is not None:
             f.write(json.dumps({"_meta": meta}, ensure_ascii=False) + "\n")
         for p in papers:

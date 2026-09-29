@@ -23,8 +23,10 @@ def _by_citations(papers: list[Paper]) -> list[Paper]:
 
 
 def _persistent(e: HttpError) -> bool:
+    """Errors that retrying later in this round won't fix. Transient 429s are handled by the HTTP layer and
+    by the three-consecutive-failures rule instead."""
     msg = str(e).lower()
-    return e.status in (401, 403, 429) or any(w in msg for w in ("api key", "quota", "credit", "budget"))
+    return e.persistent or e.status in (401, 403) or any(w in msg for w in ("quota", "credit", "budget"))
 
 
 class _Source:
