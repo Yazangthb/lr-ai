@@ -35,6 +35,11 @@ briefly, and wait for the user's go-ahead or corrections.
 
 Rules:
 - Pass `--run <dir>` to every `lr.py` command once the run exists. Keep all review state in the run folder.
+- Settings in the request override the defaults. Write each one to `config.yaml` before the step that uses it:
+  year range (`filters.year_min` / `year_max`), papers per query (`seed.per_query`, `search.per_query`),
+  databases (`search.sources`), snowball rounds, direction and limits (`snowball.direction`,
+  `max_references`, `max_citations`), other filters (`filters`), the screening budget, criteria, research
+  questions and the Google account.
 - Keep the conversation short: summarize command output instead of pasting it. The run's `log.md`
   records every step.
 - If an API is rate-limited or refuses anonymous access, the tool falls back to another source and

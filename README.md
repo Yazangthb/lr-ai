@@ -74,6 +74,20 @@ The same workbook is saved as `papers.xlsx` in the run folder. Without Composio,
 - **Step by step**: `/lr-ai:lit-review <topic> --step` stops for your approval at the queries, the screening
   results and the categories.
 
+### Settings in the prompt
+
+Add settings to the request in plain words. Claude saves them in the run's `config.yaml` before the step that
+uses them:
+
+```
+/lr-ai:lit-review graph neural networks for citation forecasting.
+Papers from 2018 on, 10 per query, 20 references and 20 citations per paper, screen at most 200 papers.
+```
+
+This works for the year range, papers per query, the databases to search, snowball rounds, direction and
+limits, filters such as minimum citations, the screening budget, your criteria and research questions, and the
+Google account.
+
 <details>
 <summary><b>Optional: API keys and settings</b></summary>
 <br>

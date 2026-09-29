@@ -20,7 +20,7 @@ wait for the user's reply.
 ## 1. Deterministic filters
 Run `lr.py filter`. It recomputes `excluded_reason` from the `filters` in `config.yaml` every time and prints
 how many papers await screening. Screening takes about one subagent per 25 papers, so keep it to roughly
-400 papers unless the user asked for more. If more remain, tighten the filters in this order, re-running
+400 papers unless the user gave another limit. If more remain, tighten the filters in this order, re-running
 `filter` after each change, until the rest fits:
 1. `min_hits: 2`: snowballed papers must be linked from at least 2 start-set papers
 2. `require_any`: 3-8 core terms of the topic, with `*` for word stems, e.g. `["citation*", "bibliometric*"]`
