@@ -15,7 +15,7 @@ under `./lr-runs`. Progress goes to stderr; a short summary goes to stdout.
 | `batches --stage screen\|enrich [--size N] [--force]` | 4b / 5 | Writes self-describing batch files for `paper-screener` subagents |
 | `apply --stage screen\|enrich [--all]` | 4b / 5 | Merges new or changed `*.result.jsonl` files into `papers.jsonl`, reports missing results. Manual `set` edits always win |
 | `export [--out file.xlsx]` | 6 | Writes the styled workbook (Papers, Overview, Method tabs) |
-| `sheet-plan --spreadsheet-id ID [--sheet-id 0] [--account ACC]` | 6 | Writes the Composio calls that build the Google Sheet |
+| `sheet-plan --spreadsheet-id ID [--sheet-id 0] [--account ACC]` | 6 | Writes the Composio calls that build the Google Sheet (`--account` defaults to `LR_AI_GOOGLE_ACCOUNT`) |
 | `status` | any | PRISMA-style counts and the suggested next step |
 | `show [--where k=v] [--fields a,b] [--sort citations] [--limit N]` | any | Lists papers (`--where status=core`, `included=true`, `found=forward`, `round=1`) |
 | `add <doi\|arXiv id\|title> ...` | any | Adds papers manually (never removed by filters) |
@@ -48,9 +48,11 @@ lr-runs/<name>-<date>/
 `("citation network" OR "citation graph") AND (forecast* OR predict*) NOT survey`: uppercase operators,
 quoted phrases, parentheses, `*` prefix wildcard. Translated to each database's own syntax.
 
-## API keys (optional, environment variables)
+## Environment variables (optional)
 
 - `OPENALEX_API_KEY`: free at openalex.org. Without it, OpenAlex search may be paused under load and
   lookups share a small daily budget.
 - `S2_API_KEY`: free on request from Semantic Scholar. Without it, requests share a busy public pool.
 - `OPENALEX_EMAIL`: identifies you to OpenAlex (polite pool).
+- `LR_AI_GOOGLE_ACCOUNT`: alias or id of the Composio Google account that gets the sheet when several are
+  connected. `export` prints it and `sheet-plan` uses it unless `--account` is given.

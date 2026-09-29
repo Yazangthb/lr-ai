@@ -26,7 +26,10 @@ Research question + criteria
  6. Export            styled .xlsx + Google Sheet (via Composio): grouped rows, colors, dropdowns, filters
 ```
 
-Claude stops at each checkpoint (queries, screening results, taxonomy) so you stay in control.
+By default, Claude runs all six steps without stopping. It ends with the sheet link and a list of the choices
+it made (research questions, criteria, queries, tightened filters, taxonomy). Every choice is saved in the
+run's `config.yaml`, so you can change one and have Claude redo that step. Add `--step` to approve the
+queries, screening results and taxonomy along the way instead.
 
 ## The output sheet
 
@@ -56,6 +59,8 @@ pip install -r requirements.txt   # pyyaml, openpyxl (Claude offers to do this o
 
 For the Google Sheet, connect [Composio](https://composio.dev)'s Google Sheets toolkit to Claude Code.
 Without it you get the `.xlsx`, which you can open in Google Sheets (File → Import) with all formatting.
+If several Google accounts are connected in Composio, set `LR_AI_GOOGLE_ACCOUNT` to the alias or id of the
+one that should get the sheets. Otherwise the first connected account is used.
 
 ### API keys (optional, recommended)
 
@@ -76,6 +81,17 @@ In Claude Code:
 ```
 /lr-ai:lit-review forecasting scientific impact with citation graphs
 ```
+
+This runs the whole review in one go. To approve each step first:
+
+```
+/lr-ai:lit-review forecasting scientific impact with citation graphs --step
+```
+
+While a review runs, LR-AI pre-approves its own `lr.py` commands and file edits under `./lr-runs`, so Claude
+Code doesn't ask about each one. It can still ask about other tools, such as Composio's Google Sheets calls
+or the result files the screening agents write. Answer "Yes, and don't ask again", or switch to the
+"accept edits" permission mode for the run.
 
 Or use the steps on their own. The skills trigger from plain requests like "snowball these papers",
 "screen the candidates", or "make a Google Sheet of the review":

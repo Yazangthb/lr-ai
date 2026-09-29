@@ -11,7 +11,7 @@
       "name": "lr-ai",
       "source": "./",
       "description": "Automated literature reviews: seed search, database search, snowballing, screening and a categorized Google Sheet.",
-      "version": "0.1.1"
+      "version": "0.2.0"
     }
   ]
 }

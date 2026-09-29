@@ -1,7 +1,8 @@
 # The phases, and how to run each one on its own
 
 LR-AI runs as a pipeline, but every phase is a separate command, so you can run and verify each one alone.
-All commands run from the repository root. Inside Claude Code, each phase is also its own skill
+All commands run from the repository root. Inside Claude Code, `/lr-ai:lit-review <topic>` runs every phase
+in one go (add `--step` to approve each phase first), and each phase is also its own skill
 (`/lr-ai:setup`, `/lr-ai:seed-search`, `/lr-ai:database-search`, `/lr-ai:snowball`, `/lr-ai:screen-papers`,
 `/lr-ai:categorize-papers`, `/lr-ai:export-sheet`).
 

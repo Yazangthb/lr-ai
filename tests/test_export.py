@@ -84,6 +84,27 @@ def test_gsheets_plan_writes_every_row_once_and_keeps_text_literal(make_run, tmp
         assert json.load(f)["tools"][0]["tool_slug"] == "GOOGLESHEETS_UPDATE_SHEET_PROPERTIES"
 
 
+def test_sheet_plan_account_comes_from_flag_or_environment(make_run, monkeypatch):
+    from lrai import cli
+    run, _ = build(make_run)
+    run.save(sample_papers())
+
+    def accounts(*extra):
+        assert cli.main(["sheet-plan", "--run", run.path, "--spreadsheet-id", "S", *extra]) == 0
+        folder = run.file("export", "gsheets")
+        found = set()
+        for name in os.listdir(folder):
+            with open(os.path.join(folder, name), encoding="utf-8") as f:
+                found |= {c.get("account") for c in json.load(f)["tools"]}
+        return found
+
+    monkeypatch.delenv("LR_AI_GOOGLE_ACCOUNT", raising=False)
+    assert accounts() == {None}
+    monkeypatch.setenv("LR_AI_GOOGLE_ACCOUNT", "work")
+    assert accounts() == {"work"}
+    assert accounts("--account", "home") == {"home"}
+
+
 def test_gsheets_rules_cover_groups_status_priority_and_reading(make_run):
     _, tabs = build(make_run)
     files = dict((n, calls) for n, _, calls in build_plan(tabs, "S"))

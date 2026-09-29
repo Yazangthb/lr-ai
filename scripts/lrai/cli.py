@@ -23,9 +23,14 @@ from .util import info, shorten, slugify, today
 SEARCHERS = {"openalex": openalex.search, "semantic_scholar": s2.search, "arxiv": arxiv.search}
 OPENALEX_KEY_HINT = ("OpenAlex refused an anonymous request. Get a free API key at https://openalex.org/ and "
                      "set OPENALEX_API_KEY (lookups/snowballing still work without one; search may not).")
+GOOGLE_ACCOUNT_VAR = "LR_AI_GOOGLE_ACCOUNT"
 
 
 # ---------------------------------------------------------------- helpers
+
+def google_account(explicit: str | None = None) -> str | None:
+    """Composio Google account for the sheet: --account, else $LR_AI_GOOGLE_ACCOUNT, else None (the only one)."""
+    return (explicit or os.environ.get(GOOGLE_ACCOUNT_VAR) or "").strip() or None
 
 def _latest_run(root: str = "lr-runs") -> str | None:
     runs = [d for d in glob.glob(os.path.join(glob.escape(root), "*")) if os.path.isfile(os.path.join(d, "config.yaml"))]
@@ -128,6 +133,9 @@ def cmd_doctor(args) -> None:
                      ("OPENALEX_API_KEY", "reliable OpenAlex search and a larger daily budget"),
                      ("OPENALEX_EMAIL", "OpenAlex polite pool")):
         print(f"  {'✓' if os.environ.get(var) else '·'} {var} {'set' if os.environ.get(var) else 'not set'} ({why})")
+    account = google_account()
+    print(f"  {'✓' if account else '·'} {GOOGLE_ACCOUNT_VAR} {'= ' + account if account else 'not set'} "
+          "(Google account for the sheet when several are connected in Composio)")
     if not ok:
         print("Not ready: install the missing Python packages.")
     elif degraded:
@@ -464,6 +472,9 @@ def cmd_export(args) -> None:
         if kind in ("group", "subgroup"):
             print(("  " if kind == "group" else "      ") + str(row[0]))
     print(f"Google Sheet title: {sheet_title(run)}")
+    account = google_account()
+    if account:
+        print(f"Google account: {account} (from {GOOGLE_ACCOUNT_VAR})")
     print("Next for Google Sheets: create the spreadsheet, then run sheet-plan --spreadsheet-id <ID>.")
 
 
@@ -471,7 +482,8 @@ def cmd_sheet_plan(args) -> None:
     from .export_gsheets import build_plan, write_plan
     run = _run(args)
     _, tabs = _tabs(run)
-    files = build_plan(tabs, args.spreadsheet_id, args.sheet_id, args.account)
+    account = google_account(args.account)
+    files = build_plan(tabs, args.spreadsheet_id, args.sheet_id, account)
     paths = write_plan(files, run.file("export", "gsheets"))
     url = f"https://docs.google.com/spreadsheets/d/{args.spreadsheet_id}/edit"
     with open(run.file("sheet_url.txt"), "w", encoding="utf-8") as f:
@@ -480,6 +492,8 @@ def cmd_sheet_plan(args) -> None:
     print(f"Google Sheets plan: {len(paths)} files; execute them in order, one COMPOSIO_MULTI_EXECUTE_TOOL call each:")
     for path, (_, desc, tools) in zip(paths, files):
         print(f"  {path}  ({len(tools)} calls) — {desc}")
+    if account:
+        print(f"Google account: {account}")
     print(f"Sheet URL: {url}")
 
 
@@ -560,7 +574,8 @@ def build_parser() -> argparse.ArgumentParser:
     p = cmd("sheet-plan", cmd_sheet_plan, "Step 6b: write Composio calls that build the Google Sheet.")
     p.add_argument("--spreadsheet-id", required=True)
     p.add_argument("--sheet-id", type=int, default=0, help="sheetId of the new spreadsheet's first tab")
-    p.add_argument("--account", help="Composio account id, if several Google accounts are connected")
+    p.add_argument("--account", help="Composio account alias or id, if several Google accounts are connected "
+                                     f"(default: ${GOOGLE_ACCOUNT_VAR})")
     return ap
 
 
