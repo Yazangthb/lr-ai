@@ -1,6 +1,7 @@
 {
   "name": "lr-ai",
-  "version": "0.2.4",
+  "displayName": "LR-AI",
+  "version": "0.2.5",
   "description": "Automated literature reviews: seed search, database keyword search, forward/backward snowballing, deduplication, filtering, LLM screening and categorization, exported as a styled Google Sheet (via Composio) and Excel file.",
   "author": {
     "name": "Yazan Alnakri",
@@ -8,6 +9,9 @@
   },
   "homepage": "https://github.com/YAZANGTHB/lr-ai",
   "repository": "https://github.com/YAZANGTHB/lr-ai",
+  "documentationUrl": "https://github.com/YAZANGTHB/lr-ai/tree/main/docs",
+  "supportUrl": "https://github.com/YAZANGTHB/lr-ai/issues",
+  "privacyPolicyUrl": "https://github.com/YAZANGTHB/lr-ai/blob/main/PRIVACY.md",
   "license": "MIT",
   "keywords": [
     "literature-review",

@@ -224,6 +224,8 @@ LR-AI runs on your computer and keeps everything in the review's folder. It cont
 - There's no telemetry and no other server. API responses are cached in the review's `cache/` folder, and
   deleting the review folder deletes everything LR-AI stored.
 
+The full policy is in [PRIVACY.md](PRIVACY.md).
+
 ## Limitations
 
 - LLM screening assists your judgment; it doesn't replace it. Check the core and skim decisions, especially
