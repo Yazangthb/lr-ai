@@ -217,7 +217,9 @@ LR-AI runs on your computer and keeps everything in the review's folder. It cont
 | Google Sheets, through your own Composio connection | The review: papers, summaries, categories and the Method tab | Building the sheet in your Google account |
 | PyPI (`pypi.org`) | A download request for `pyyaml` and `openpyxl`, only if they're missing and you approve the install | Setup |
 
-- API keys are read from your environment variables and sent only to the service they belong to.
+- API keys are optional. LR-AI reads them from your environment variables and sends each one only to the
+  service it belongs to. It doesn't use plugin settings for them because Claude Code doesn't pass those to the
+  scripts a skill runs.
 - Screening and summaries run as subagents in your own Claude session. They read only the review's batch files.
 - There's no telemetry and no other server. API responses are cached in the review's `cache/` folder, and
   deleting the review folder deletes everything LR-AI stored.
