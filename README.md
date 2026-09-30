@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/assets/logo.svg" width="88" alt="LR-AI logo">
+![LR-AI logo](docs/assets/logo.svg)
 
 # LR-AI
 
@@ -14,7 +14,7 @@ From a research question to a categorized, summarized Google Sheet of papers, in
 [![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-D97757)](https://claude.com/claude-code)
 [![Sources: OpenAlex, Semantic Scholar, arXiv](https://img.shields.io/badge/sources-OpenAlex%20%C2%B7%20Semantic%20Scholar%20%C2%B7%20arXiv-3C5A82)](#how-it-works)
 
-[Use cases](#use-cases) · [What you get](#what-you-get) · [Quick start](#quick-start) · [How it works](#how-it-works) · [Without Claude Code](#without-claude-code) · [Docs](docs/phases.md)
+[Use cases](#use-cases) · [What you get](#what-you-get) · [Quick start](#quick-start) · [How it works](#how-it-works) · [Without Claude Code](#without-claude-code) · [Privacy](#privacy-and-data) · [Docs](docs/phases.md)
 
 </div>
 
@@ -31,9 +31,8 @@ From a research question to a categorized, summarized Google Sheet of papers, in
 
 ## What you get
 
-<p align="center">
-  <img src="docs/assets/sheet-preview.png" width="100%" alt="The Papers tab: papers grouped under research-question categories and sub-categories, with color-coded status, priority and reading status">
-</p>
+![The Papers tab: papers grouped under research-question categories and sub-categories, with color-coded status, priority and reading status](docs/assets/sheet-preview.png)
+
 <p align="center"><sub>The Papers tab of a real run: 78 papers on graph neural networks for citation forecasting.</sub></p>
 
 | Tab | Contents |
@@ -50,12 +49,19 @@ The same workbook is saved as `papers.xlsx` in the run folder. Without Composio,
 **Requirements:** [Claude Code](https://claude.com/claude-code) and Python 3.9+. For the Google Sheet, connect
 [Composio](https://composio.dev)'s Google Sheets toolkit to Claude Code.
 
-**1. Install the plugin** in Claude Code:
+**Where it works:** Claude Code in the terminal, the desktop app's Code tab and the IDE extensions. Cowork
+should work but is untested. Regular chat can't run its screening agents or its Python engine.
 
-```
-/plugin marketplace add YAZANGTHB/lr-ai
-/plugin install lr-ai@lr-ai
-```
+**1. Install the plugin**, in either of these ways:
+
+- In the Claude desktop app or on claude.ai: **Customize → Plugins → Add → Add marketplace**, enter
+  `YAZANGTHB/lr-ai`, then install LR-AI.
+- In a Claude Code terminal session:
+
+  ```
+  /plugin marketplace add YAZANGTHB/lr-ai
+  /plugin install lr-ai@lr-ai
+  ```
 
 **2. Check the setup.** Say *"run the LR-AI doctor"*. It checks Python, installs the two Python packages
 (`pyyaml`, `openpyxl`) if they're missing, and tests the databases.
@@ -198,6 +204,23 @@ lr-runs/<name>-<date>/
 ```
 
 API responses are cached, so re-running a step costs nothing and an interrupted run resumes where it stopped.
+
+## Privacy and data
+
+LR-AI runs on your computer and keeps everything in the review's folder. It contacts only these services:
+
+| Service | What LR-AI sends | Why |
+|---|---|---|
+| OpenAlex (`api.openalex.org`) | Your queries, paper identifiers and titles, plus `OPENALEX_API_KEY` and `OPENALEX_EMAIL` if you set them | Search, snowballing, metadata |
+| Semantic Scholar (`api.semanticscholar.org`) | Your queries, paper identifiers and titles, plus `S2_API_KEY` if you set it | Search, snowballing, metadata |
+| arXiv (`export.arxiv.org`) | Your queries and paper titles | Search, title lookups |
+| Google Sheets, through your own Composio connection | The review: papers, summaries, categories and the Method tab | Building the sheet in your Google account |
+| PyPI (`pypi.org`) | A download request for `pyyaml` and `openpyxl`, only if they're missing and you approve the install | Setup |
+
+- API keys are read from your environment variables and sent only to the service they belong to.
+- Screening and summaries run as subagents in your own Claude session. They read only the review's batch files.
+- There's no telemetry and no other server. API responses are cached in the review's `cache/` folder, and
+  deleting the review folder deletes everything LR-AI stored.
 
 ## Limitations
 
