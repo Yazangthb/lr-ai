@@ -2,8 +2,14 @@ cff-version: 1.2.0
 message: "If you use LR-AI in your research, please cite it as below."
 title: "LR-AI: Automated literature reviews with Claude Code"
 type: software
+abstract: >-
+  LR-AI is an open-source Claude Code plugin that automates the search and screening stages of a literature
+  review. It runs seed searches and boolean database searches on OpenAlex, Semantic Scholar and arXiv, snowballs
+  forward and backward through citations, de-duplicates and filters the results, screens every paper with
+  parallel subagents, builds a taxonomy with summaries, and exports a categorized Google Sheet or Excel workbook
+  with a PRISMA-style methods tab.
 version: 0.2.5
-date-released: 2026-09-29
+date-released: 2026-09-30
 license: MIT
 repository-code: "https://github.com/YAZANGTHB/lr-ai"
 url: "https://github.com/YAZANGTHB/lr-ai"
