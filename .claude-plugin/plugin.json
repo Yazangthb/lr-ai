@@ -1,7 +1,7 @@
 {
   "name": "lr-ai",
   "displayName": "LR-AI",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "Automated literature reviews: seed search, database keyword search, forward/backward snowballing, deduplication, filtering, LLM screening and categorization, exported as a styled Google Sheet (via Composio) and Excel file.",
   "author": {
     "name": "Yazan Alnakri",

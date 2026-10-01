@@ -8,8 +8,8 @@ abstract: >-
   forward and backward through citations, de-duplicates and filters the results, screens every paper with
   parallel subagents, builds a taxonomy with summaries, and exports a categorized Google Sheet or Excel workbook
   with a PRISMA-style methods tab.
-version: 0.2.5
-date-released: 2026-09-30
+version: 0.2.6
+date-released: 2026-10-01
 license: MIT
 repository-code: "https://github.com/YAZANGTHB/lr-ai"
 url: "https://github.com/YAZANGTHB/lr-ai"

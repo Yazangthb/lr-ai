@@ -54,8 +54,8 @@ should work but is untested. Regular chat can't run its screening agents or its 
 
 **1. Install the plugin**, in either of these ways:
 
-- In the Claude desktop app or on claude.ai: **Customize → Plugins → Add → Add marketplace**, enter
-  `YAZANGTHB/lr-ai`, then install LR-AI.
+- From Claude's plugin directory, on claude.ai or in the desktop app: **Customize → Plugins → Discover**, search
+  for **LR-AI** and add it. It also syncs to Claude Code sessions signed in to the same account.
 - In a Claude Code terminal session:
 
   ```
