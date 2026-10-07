@@ -402,6 +402,84 @@ def cmd_add(args) -> None:
         print(f"  {e}")
 
 
+def cmd_import(args) -> None:
+    from .importer import fill_from_openalex, read_file
+    run = _run(args)
+    found, errors = [], []
+    for path in args.files:
+        try:
+            records = read_file(path)
+        except (OSError, ValueError) as e:
+            raise SystemExit(f"Cannot import {path}: {e}")
+        for p in records:
+            p.found_via = [f"import:{os.path.basename(path)}"]
+        info(f"  {path}: {len(records)} records")
+        found.extend(records)
+    filled, errs = fill_from_openalex(found) if not args.no_fetch else (0, [])
+    errors.extend(errs)
+    untitled = sum(1 for p in found if not p.title)
+    run.save_raw(f"import-{_seq(run, 'import-'):02d}", found)
+    papers, added = merge_into(run.load(), found)
+    labelled = [p for p in found if p.extra.get("label") in (0, 1)]
+    _finish(run, papers, found, "import", f"{len(args.files)} files → {len(found)} records, {added} new "
+            f"(total {len(papers)})", records=len(found), added=added, files=args.files, labelled=len(labelled),
+            fetched=filled, untitled=untitled, errors=errors)
+    print(f"Imported {len(found)} records, {added} new, {len(papers)} unique papers in the run.")
+    if labelled:
+        print(f"  labels: {len(labelled)} records, {sum(p.extra['label'] for p in labelled)} marked included")
+    if filled:
+        print(f"  fetched titles/abstracts for {filled} records from OpenAlex")
+    if untitled:
+        print(f"  {untitled} records still have no title (not found in OpenAlex)")
+    for e in errors:
+        print(f"  error: {e}")
+
+
+def cmd_eval(args) -> None:
+    import json
+    from . import evaluate
+    run = _run(args)
+    papers = run.load()
+    if args.labels:
+        from .importer import read_file
+        matched = evaluate.attach_labels(papers, read_file(args.labels))
+        info(f"  {matched} run papers matched a label in {args.labels}")
+    labels = evaluate.labels_from(papers)
+    result = {}
+    if labels:
+        result = evaluate.evaluate(papers, labels)
+        print(f"Labelled papers: {result['labelled']} ({result['included_by_humans']} included by the reviewers); "
+              f"unscreened: {result['unscreened']}")
+        keys = ("recall", "specificity", "precision", "f1", "kappa", "work_saved", "wss")
+        print("rule\t" + "\t".join(keys) + "\tTP\tFP\tFN\tTN")
+        for rule, m in result["rules"].items():
+            vals = ["–" if m[k] is None else f"{m[k]:.3f}" for k in keys]
+            print(f"{rule}\t" + "\t".join(vals) + f"\t{m['tp']}\t{m['fp']}\t{m['fn']}\t{m['tn']}")
+        w = result["wss@95"]
+        print(f"WSS@95 (ranked by status and relevance): {'–' if w is None else f'{w:.3f}'}")
+        if result["missed"]:
+            print(f"Included by the reviewers but excluded by LR-AI ({len(result['missed'])}):")
+            for m in result["missed"][: args.show]:
+                print(f"  {m['id']}\t{m['status'] or 'filtered'}\t{shorten(m['title'], 90)}\t{shorten(m['reason'], 90)}")
+    elif not args.compare:
+        raise SystemExit("No labelled papers. Import a labelled file (lr.py import) or pass --labels FILE.")
+    if args.compare:
+        runs = [papers] + [Run(path, use_cache=False).load() for path in args.compare]
+        result["agreement"] = agr = evaluate.agreement(runs)
+        print(f"Agreement across {agr['runs']} runs on {agr['papers']} papers screened in all of them:")
+        for pr in agr["pairs"]:
+            print(f"  runs {pr['runs'][0]} vs {pr['runs'][1]}: agreement {pr['agreement'] or 0:.3f}, "
+                  f"kappa {pr['kappa'] or 0:.3f} (core/skim/exclude), {pr['kappa_included'] or 0:.3f} (included or not)")
+        if agr["fleiss_kappa"] is not None:
+            print(f"  Fleiss kappa: {agr['fleiss_kappa']:.3f} (3 classes), {agr['fleiss_kappa_included']:.3f} (included or not)")
+    out = args.out or run.file("eval.json")
+    with open(out, "w", encoding="utf-8") as f:
+        json.dump(result, f, ensure_ascii=False, indent=1)
+    summary = {k: v for k, v in result.items() if k not in ("missed",)}
+    run.log("eval", f"evaluation written to {os.path.basename(out)}", **summary)
+    print(f"Wrote {out}")
+
+
 EDITABLE = ("status", "status_reason", "priority", "first_level", "second_level", "summary", "short_summary",
             "rq_relation", "code")
 CHOICES = {"status": STATUSES, "priority": PRIORITIES}
@@ -561,6 +639,18 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = cmd("add", cmd_add, "Add papers by DOI, arXiv id or exact title (never filtered out).")
     p.add_argument("items", nargs="+")
+
+    p = cmd("import", cmd_import, "Import papers from CSV/TSV, RIS or BibTeX files (e.g. a database export or a "
+                                  "labelled benchmark such as SYNERGY).")
+    p.add_argument("files", nargs="+")
+    p.add_argument("--no-fetch", action="store_true", help="don't fetch missing titles/abstracts from OpenAlex")
+
+    p = cmd("eval", cmd_eval, "Compare screening decisions with human labels (recall, precision, kappa, WSS) "
+                              "and, with --compare, with other runs of the same papers.")
+    p.add_argument("--labels", help="labelled file (CSV/RIS/BibTeX) to match onto the run's papers")
+    p.add_argument("--compare", nargs="+", metavar="RUN", help="other run folders that screened the same papers")
+    p.add_argument("--out", help="output path (default: <run>/eval.json)")
+    p.add_argument("--show", type=int, default=20, help="how many missed papers to list")
 
     p = cmd("set", cmd_set, "Manually set fields on one paper, e.g. status=exclude status_reason='off topic'.")
     p.add_argument("id")

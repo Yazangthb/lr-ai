@@ -15,6 +15,7 @@ KIND_LABELS = {
     "backward": "Backward snowballing (references)",
     "forward": "Forward snowballing (citations)",
     "manual": "Added manually",
+    "import": "Imported from file",
 }
 
 
@@ -84,7 +85,7 @@ def next_step(s: dict, cfg: dict) -> str:
     if not s["identified"].get("openalex") and not s["identified"].get("semantic_scholar") \
             and not s["identified"].get("arxiv") and cfg["search"].get("queries"):
         return "Run: search"
-    if not (s["identified"].get("backward") or s["identified"].get("forward")):
+    if not (s["identified"].get("backward") or s["identified"].get("forward") or s["identified"].get("import")):
         return "Run: snowball (then filter)"
     if s["awaiting_screening"]:
         return f"{s['awaiting_screening']} papers await screening: run filter, then batches --stage screen"

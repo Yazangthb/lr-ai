@@ -45,6 +45,9 @@ def merge_two(a: Paper, b: Paper) -> Paper:
     m.found_via = list(dict.fromkeys(list(a.found_via) + list(b.found_via)))
     m.round = min(a.round, b.round)
     m.extra = {**other.extra, **primary.extra}
+    labels = [x.extra["label"] for x in (a, b) if x.extra.get("label") in (0, 1)]
+    if labels:  # a human inclusion label survives a merge with an excluded duplicate
+        m.extra["label"] = max(labels)
     # manual edits (`lr.py set`) always win, whichever record they were made on
     manual_primary = set(primary.extra.get("manual") or [])
     manual_other = set(other.extra.get("manual") or [])
