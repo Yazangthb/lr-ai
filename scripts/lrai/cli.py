@@ -256,8 +256,10 @@ def cmd_snowball(args) -> None:
     round_no = args.round or rounds_done + 1
     source = args.source or cfg.get("from") or "all"
 
+    blocked = filters.block_keys(run.config["filters"].get("block"))
+
     def eligible(p: Paper) -> bool:
-        if p.round != round_no - 1 or p.excluded_reason:
+        if p.round != round_no - 1 or p.excluded_reason or blocked.intersection(p.dedup_keys()):
             return False
         return p.included if source == "included" else p.status != "exclude"
 
@@ -512,6 +514,43 @@ def cmd_eval(args) -> None:
     print(f"Wrote {out}")
 
 
+def cmd_coverage(args) -> None:
+    import json
+    from . import evaluate
+    from .importer import read_file
+    run = _run(args)
+    papers = run.load()
+    try:
+        gold = read_file(args.labels, label_column=args.label_column)
+    except (OSError, ValueError) as e:
+        raise SystemExit(f"Cannot read {args.labels}: {e}")
+    at = [int(x) for x in args.at.split(",")] if args.at else []
+    r = evaluate.coverage(papers, gold, at)
+    if not r["review_included"]:
+        raise SystemExit(f"{args.labels} has no records labelled included.")
+    print(f"Review: {r['review_included']} included of {r['review_screened']} screened records. "
+          f"LR-AI run: {r['run_papers']} papers, {r['run_included']} included (core + skim).")
+    print(f"  included studies found anywhere in the run: {r['found_in_run']} ({_fmt(r['recall_run'])})")
+    print(f"  ... and kept in LR-AI's included list:     {r['kept_by_lrai']} ({_fmt(r['recall_included_list'])}); "
+          f"precision against the review {_fmt(r['precision_vs_review'])} (lower bound)")
+    print("  recall in LR-AI's top N (included first, by relevance):")
+    for k, v in r["recall_at"].items():
+        print(f"    top {k}: {_fmt(v)}")
+    print(f"  share of the review's screened records that LR-AI also found: {_fmt(r['overlap_with_review_screened'])}")
+    print("  found by: " + ", ".join(f"{k} {v}" for k, v in r["found_by_stage"].items()))
+    if r["missed"]:
+        print(f"Included in the review but not in LR-AI's included list ({len(r['missed'])}):")
+        for m in r["missed"][: args.show]:
+            print(f"  {m['id']}\t{shorten(m['why'], 60)}\t{shorten(m['title'], 90)}")
+    print(f"LR-AI included {r['extras_count']} papers the review never screened (check a sample for relevance).")
+    out = args.out or run.file("coverage.json")
+    with open(out, "w", encoding="utf-8") as f:
+        json.dump(r, f, ensure_ascii=False, indent=1)
+    run.log("coverage", f"coverage against {os.path.basename(args.labels)} written to {os.path.basename(out)}",
+            **{k: v for k, v in r.items() if k not in ("missed", "extras")})
+    print(f"Wrote {out}")
+
+
 EDITABLE = ("status", "status_reason", "priority", "first_level", "second_level", "summary", "short_summary",
             "rq_relation", "code")
 CHOICES = {"status": STATUSES, "priority": PRIORITIES}
@@ -686,6 +725,15 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--compare", nargs="+", metavar="RUN", help="other run folders that screened the same papers")
     p.add_argument("--out", help="output path (default: <run>/eval.json)")
     p.add_argument("--show", type=int, default=20, help="how many missed papers to list")
+
+    p = cmd("coverage", cmd_coverage, "Compare the run with a published review's labelled list: recall of the "
+                                      "review's included studies in the run, in LR-AI's included list and in "
+                                      "LR-AI's top N, and which stage found them.")
+    p.add_argument("--labels", required=True, help="the review's labelled file (CSV/RIS/BibTeX)")
+    p.add_argument("--label-column", help="label column (default: label_included, included, ...)")
+    p.add_argument("--at", help="comma-separated list sizes N for recall in the top N, e.g. 104,300,1000")
+    p.add_argument("--out", help="output path (default: <run>/coverage.json)")
+    p.add_argument("--show", type=int, default=30, help="how many missed studies to list")
 
     p = cmd("set", cmd_set, "Manually set fields on one paper, e.g. status=exclude status_reason='off topic'.")
     p.add_argument("id")

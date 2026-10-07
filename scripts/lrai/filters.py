@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import re
 
-from .models import Paper
+from .models import Paper, norm_arxiv, norm_doi, norm_title
 from .util import this_year
 
 PROTECTED = ("seed:known", "manual")
@@ -27,8 +27,31 @@ def compile_terms(terms) -> list[tuple[str, re.Pattern]]:
     return [(t, _term_regex(t)) for t in terms or [] if str(t).strip().strip('"*')]
 
 
-def exclusion_reason(p: Paper, f: dict, require_any=None, exclude_any=None, year_now: int | None = None) -> str | None:
+def block_keys(items) -> set[str]:
+    """Dedup keys for the `block` list: DOIs, arXiv ids, OpenAlex ids (W...) or exact titles."""
+    keys = set()
+    for item in items or []:
+        s = str(item).strip()
+        if not s:
+            continue
+        doi, arxiv = norm_doi(s), norm_arxiv(s)
+        if doi:
+            keys.add("doi:" + doi)
+        elif arxiv:
+            keys.add("arxiv:" + arxiv.lower())
+        elif re.fullmatch(r"(?:https?://openalex\.org/)?[Ww]\d+", s):
+            keys.add("openalex:" + s.rsplit("/", 1)[-1].upper())
+        elif norm_title(s):
+            keys.add("title:" + norm_title(s))
+    return keys
+
+
+def exclusion_reason(p: Paper, f: dict, require_any=None, exclude_any=None, year_now: int | None = None,
+                     blocked: set | None = None) -> str | None:
     """Return why `p` fails the filters, or None if it passes."""
+    blocked = block_keys(f.get("block")) if blocked is None else blocked
+    if blocked and blocked.intersection(p.dedup_keys()):
+        return "blocked"  # before the protection below: a blocked paper never enters, even as a seed
     if any(v in PROTECTED for v in p.found_via):
         return None
     year_now = year_now or this_year()
@@ -70,9 +93,10 @@ def apply(papers: list[Paper], f: dict) -> dict[str, int]:
     """Set `excluded_reason` on every paper. Returns counts per reason."""
     req, exc = compile_terms(f.get("require_any")), compile_terms(f.get("exclude_any"))
     year_now = this_year()
+    blocked = block_keys(f.get("block"))
     counts: dict[str, int] = {}
     for p in papers:
-        p.excluded_reason = exclusion_reason(p, f, req, exc, year_now)
+        p.excluded_reason = exclusion_reason(p, f, req, exc, year_now, blocked)
         if p.excluded_reason:
             key = re.sub(r":.*$", "", p.excluded_reason) if p.excluded_reason.startswith(("language", "publication type", "venue")) else p.excluded_reason
             counts[key] = counts.get(key, 0) + 1

@@ -162,6 +162,81 @@ def evaluate(papers: list[Paper]) -> dict:
     }
 
 
+def _coverage_rank(p: Paper) -> tuple:
+    """LR-AI's reading order for a whole run: included (core, then skim) by relevance, then papers screened
+    out, then papers removed by the filters or not screened."""
+    if p.excluded_reason or p.status is None:
+        return (3, 0.0)
+    return (_ORDER[p.status], -(p.relevance if p.relevance is not None else 0.0))
+
+
+def coverage(papers: list[Paper], gold: list[Paper], at: list[int] | None = None) -> dict:
+    """How much of a published review LR-AI reproduces when it searched on its own.
+
+    `gold` is the review's labelled list (label 1 = included in the review, 0 = screened and excluded).
+    Reports recall of the included studies in the whole run, in LR-AI's own included list (core + skim) and
+    in LR-AI's top-N for each N in `at` (e.g. N = the size of the review's own lists, for an equal-length
+    comparison), which stage found each included study, and LR-AI's included papers that the review never
+    screened (candidates for a manual relevance check; precision against the review is a lower bound)."""
+    gold = [g for g in gold if label(g) is not None]
+    combined = list(papers) + gold
+    n = len(papers)
+    order = sorted(range(n), key=lambda i: (_coverage_rank(papers[i]), papers[i].id))
+    rank_of = {i: r for r, i in enumerate(order, 1)}
+    rows = []  # one per gold record group
+    extras = []
+    for idxs in group(combined):
+        run_idx = [i for i in idxs if i < n]
+        gold_idx = [i for i in idxs if i >= n]
+        if not gold_idx:
+            if any(papers[i].included for i in run_idx):
+                extras.append(min(run_idx, key=lambda i: rank_of[i]))
+            continue
+        lab = max(label(combined[i]) for i in gold_idx)
+        best = min(run_idx, key=lambda i: rank_of[i]) if run_idx else None
+        rows.append({"label": lab, "gold": combined[gold_idx[0]], "run": best,
+                     "rank": rank_of[best] if best is not None else None})
+    positives = [r for r in rows if r["label"] == 1]
+    total = len(positives)
+    in_run = [r for r in positives if r["run"] is not None]
+    kept = [r for r in in_run if papers[r["run"]].included]
+    list_size = sum(1 for p in papers if p.included)
+    sizes = sorted((set(at or []) | {total, list_size}) - {0})
+    stage = Counter()
+    for r in in_run:
+        kinds = set(papers[r["run"]].found_kinds)
+        snow = bool(kinds & {"backward", "forward"})
+        searched = bool(kinds - {"backward", "forward"})
+        stage["search and snowballing" if snow and searched else "snowballing only" if snow else "search only"] += 1
+    missed = []
+    for r in positives:
+        if r["run"] is None:
+            missed.append({"title": r["gold"].title, "id": r["gold"].id, "why": "never found"})
+        elif not papers[r["run"]].included:
+            p = papers[r["run"]]
+            missed.append({"title": p.title, "id": p.id,
+                           "why": p.excluded_reason or ("screened out: " + (p.status_reason or "")
+                                                        if p.status else "not screened")})
+    return {
+        "review_included": total,
+        "review_screened": len(rows),
+        "run_papers": n,
+        "run_included": list_size,
+        "found_in_run": len(in_run),
+        "kept_by_lrai": len(kept),
+        "recall_run": _ratio(len(in_run), total),
+        "recall_included_list": _ratio(len(kept), total),
+        "precision_vs_review": _ratio(len(kept), list_size),
+        "recall_at": {str(k): _ratio(sum(1 for r in in_run if r["rank"] <= k), total) for k in sizes},
+        "overlap_with_review_screened": _ratio(sum(1 for r in rows if r["run"] is not None), len(rows)),
+        "found_by_stage": dict(stage),
+        "missed": missed,
+        "extras_count": len(extras),
+        "extras": [{"id": papers[i].id, "title": papers[i].title, "status": papers[i].status,
+                    "relevance": papers[i].relevance} for i in sorted(extras, key=lambda i: rank_of[i])],
+    }
+
+
 def fleiss(ratings: list[list]) -> float | None:
     """Fleiss' kappa; `ratings` holds one list of category labels per item (same number of raters each)."""
     items = [r for r in ratings if len(r) >= 2]
