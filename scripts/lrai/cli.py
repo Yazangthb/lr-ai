@@ -403,36 +403,57 @@ def cmd_add(args) -> None:
 
 
 def cmd_import(args) -> None:
-    from .importer import fill_from_openalex, read_file
+    from .evaluate import label
+    from .importer import fill_from_openalex, new_stats, read_file
     run = _run(args)
-    found, errors = [], []
+    found, errors, stats = [], [], new_stats()
     for path in args.files:
+        file_stats = new_stats()
         try:
-            records = read_file(path)
+            records = read_file(path, file_stats, args.label_column)
         except (OSError, ValueError) as e:
             raise SystemExit(f"Cannot import {path}: {e}")
         for p in records:
             p.found_via = [f"import:{os.path.basename(path)}"]
-        info(f"  {path}: {len(records)} records")
+        info(f"  {path}: {len(records)} records" + (f", labels from column {file_stats['label_column']!r}"
+                                                    if file_stats["label_column"] else ""))
+        for k in ("rows", "skipped", "skipped_included", "unreadable_labels"):
+            stats[k] += file_stats[k]
         found.extend(records)
     filled, errs = fill_from_openalex(found) if not args.no_fetch else (0, [])
     errors.extend(errs)
-    untitled = sum(1 for p in found if not p.title)
     run.save_raw(f"import-{_seq(run, 'import-'):02d}", found)
     papers, added = merge_into(run.load(), found)
-    labelled = [p for p in found if p.extra.get("label") in (0, 1)]
+    imported = [p for p in papers if any(v.startswith("import:") for v in p.found_via)]
+    labelled = [p for p in imported if label(p) is not None]
+    counts = {"labelled": len(labelled), "labelled_included": sum(label(p) for p in labelled),
+              "label_conflicts": sum(1 for p in labelled if p.extra.get("label_conflict")),
+              "untitled": sum(1 for p in imported if not p.title),
+              "no_abstract": sum(1 for p in imported if not p.abstract)}
     _finish(run, papers, found, "import", f"{len(args.files)} files → {len(found)} records, {added} new "
-            f"(total {len(papers)})", records=len(found), added=added, files=args.files, labelled=len(labelled),
-            fetched=filled, untitled=untitled, errors=errors)
-    print(f"Imported {len(found)} records, {added} new, {len(papers)} unique papers in the run.")
+            f"(total {len(papers)})", records=len(found), added=added, files=args.files, fetched=filled,
+            errors=errors, **stats, **counts)
+    print(f"Imported {len(found)} records ({stats['rows']} rows read, {stats['skipped']} skipped), {added} new, "
+          f"{len(papers)} unique papers in the run.")
+    if stats["skipped_included"]:
+        print(f"  warning: {stats['skipped_included']} skipped rows were labelled included (no title or identifier)")
     if labelled:
-        print(f"  labels: {len(labelled)} records, {sum(p.extra['label'] for p in labelled)} marked included")
+        print(f"  labels after merging duplicates: {counts['labelled']} papers, {counts['labelled_included']} included")
+    if counts["label_conflicts"]:
+        print(f"  warning: {counts['label_conflicts']} papers merged records with conflicting labels (kept 'included')")
+    if stats["unreadable_labels"]:
+        print(f"  warning: {stats['unreadable_labels']} label values not understood (kept unlabelled)")
     if filled:
         print(f"  fetched titles/abstracts for {filled} records from OpenAlex")
-    if untitled:
-        print(f"  {untitled} records still have no title (not found in OpenAlex)")
+    if counts["untitled"] or counts["no_abstract"]:
+        print(f"  {counts['untitled']} papers have no title and {counts['no_abstract']} no abstract "
+              f"(try: lr.py complete)")
     for e in errors:
         print(f"  error: {e}")
+
+
+def _fmt(v) -> str:
+    return "–" if v is None else f"{v:.3f}"
 
 
 def cmd_eval(args) -> None:
@@ -440,23 +461,33 @@ def cmd_eval(args) -> None:
     from . import evaluate
     run = _run(args)
     papers = run.load()
+    result: dict = {}
     if args.labels:
         from .importer import read_file
-        matched = evaluate.attach_labels(papers, read_file(args.labels))
-        info(f"  {matched} run papers matched a label in {args.labels}")
-    labels = evaluate.labels_from(papers)
-    result = {}
-    if labels:
-        result = evaluate.evaluate(papers, labels)
+        try:
+            labelled = read_file(args.labels, label_column=args.label_column)
+        except (OSError, ValueError) as e:
+            raise SystemExit(f"Cannot read {args.labels}: {e}")
+        result["label_matching"] = lm = evaluate.attach_labels(papers, labelled)
+        print(f"Labels from {args.labels}: {lm['matched']} run papers matched; "
+              f"{lm['unmatched_positives']} included papers in the file are not in the run")
+        if lm["conflicts"]:
+            print(f"  warning: {lm['conflicts']} label conflicts (kept 'included')")
+    if any(evaluate.label(p) is not None for p in papers):
+        result.update(evaluate.evaluate(papers))
+        unmatched = result.get("label_matching", {}).get("unmatched_positives", 0)
         print(f"Labelled papers: {result['labelled']} ({result['included_by_humans']} included by the reviewers); "
-              f"unscreened: {result['unscreened']}")
+              f"unscreened: {result['unscreened']} ({result['unscreened_included']} of them included); "
+              f"no abstract: {result['no_abstract']}")
         keys = ("recall", "specificity", "precision", "f1", "kappa", "work_saved", "wss")
         print("rule\t" + "\t".join(keys) + "\tTP\tFP\tFN\tTN")
         for rule, m in result["rules"].items():
-            vals = ["–" if m[k] is None else f"{m[k]:.3f}" for k in keys]
-            print(f"{rule}\t" + "\t".join(vals) + f"\t{m['tp']}\t{m['fp']}\t{m['fn']}\t{m['tn']}")
-        w = result["wss@95"]
-        print(f"WSS@95 (ranked by status and relevance): {'–' if w is None else f'{w:.3f}'}")
+            print(f"{rule}\t" + "\t".join(_fmt(m[k]) for k in keys) + f"\t{m['tp']}\t{m['fp']}\t{m['fn']}\t{m['tn']}")
+        print(f"WSS@95 (reading in LR-AI's order; ties counted pessimistically): {_fmt(result['wss@95'])} "
+              f"(optimistic ties: {_fmt(result['wss@95_best_case'])})")
+        if unmatched:
+            print(f"  note: recall above counts only papers in the run; {unmatched} included papers were never "
+                  "found, so the end-to-end recall is lower")
         if result["missed"]:
             print(f"Included by the reviewers but excluded by LR-AI ({len(result['missed'])}):")
             for m in result["missed"][: args.show]:
@@ -466,17 +497,18 @@ def cmd_eval(args) -> None:
     if args.compare:
         runs = [papers] + [Run(path, use_cache=False).load() for path in args.compare]
         result["agreement"] = agr = evaluate.agreement(runs)
-        print(f"Agreement across {agr['runs']} runs on {agr['papers']} papers screened in all of them:")
+        print(f"Agreement across {agr['runs']} runs on {agr['papers']} papers screened by the LLM in all of them "
+              f"(screened per run: {', '.join(map(str, agr['screened_per_run']))}):")
         for pr in agr["pairs"]:
-            print(f"  runs {pr['runs'][0]} vs {pr['runs'][1]}: agreement {pr['agreement'] or 0:.3f}, "
-                  f"kappa {pr['kappa'] or 0:.3f} (core/skim/exclude), {pr['kappa_included'] or 0:.3f} (included or not)")
-        if agr["fleiss_kappa"] is not None:
-            print(f"  Fleiss kappa: {agr['fleiss_kappa']:.3f} (3 classes), {agr['fleiss_kappa_included']:.3f} (included or not)")
+            print(f"  runs {pr['runs'][0]} vs {pr['runs'][1]}: agreement {_fmt(pr['agreement'])}, "
+                  f"kappa {_fmt(pr['kappa'])} (core/skim/exclude), {_fmt(pr['kappa_included'])} (included or not)")
+        print(f"  Fleiss kappa: {_fmt(agr['fleiss_kappa'])} (3 classes), "
+              f"{_fmt(agr['fleiss_kappa_included'])} (included or not)")
     out = args.out or run.file("eval.json")
     with open(out, "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, indent=1)
-    summary = {k: v for k, v in result.items() if k not in ("missed",)}
-    run.log("eval", f"evaluation written to {os.path.basename(out)}", **summary)
+    run.log("eval", f"evaluation written to {os.path.basename(out)}",
+            **{k: v for k, v in result.items() if k != "missed"})
     print(f"Wrote {out}")
 
 
@@ -644,10 +676,13 @@ def build_parser() -> argparse.ArgumentParser:
                                   "labelled benchmark such as SYNERGY).")
     p.add_argument("files", nargs="+")
     p.add_argument("--no-fetch", action="store_true", help="don't fetch missing titles/abstracts from OpenAlex")
+    p.add_argument("--label-column", help="column (or BibTeX field) holding the human decision "
+                                          "(default: label_included, included, label, ...)")
 
     p = cmd("eval", cmd_eval, "Compare screening decisions with human labels (recall, precision, kappa, WSS) "
                               "and, with --compare, with other runs of the same papers.")
     p.add_argument("--labels", help="labelled file (CSV/RIS/BibTeX) to match onto the run's papers")
+    p.add_argument("--label-column", help="label column in --labels (default: label_included, included, ...)")
     p.add_argument("--compare", nargs="+", metavar="RUN", help="other run folders that screened the same papers")
     p.add_argument("--out", help="output path (default: <run>/eval.json)")
     p.add_argument("--show", type=int, default=20, help="how many missed papers to list")

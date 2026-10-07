@@ -4,6 +4,9 @@ Columns and tags are matched by common names, so exports from Scopus, Web of Sci
 the SYNERGY dataset load without settings. A label column (label_included, included, label, ...) is kept in
 `extra["label"]` (1 = included by the human reviewers, 0 = excluded) for `lr.py eval`.
 Rows that carry only identifiers (SYNERGY's *_ids.csv) get their title and abstract from OpenAlex.
+
+Every reader fills a `stats` dict (rows read, rows skipped and how many of them were labelled included,
+unreadable label values, the label column used), so nothing is dropped silently.
 """
 from __future__ import annotations
 
@@ -29,13 +32,19 @@ COLUMNS = {
     "authors": ("authors", "author", "au", "author full names"),
     "url": ("url", "link"),
 }
-LABEL_COLUMNS = ("label_included", "included", "label", "inclusion", "final_included", "label_abstract_screening")
+LABEL_COLUMNS = ("label_included", "included", "label", "inclusion", "final_included")
 _TRUE = {"1", "1.0", "true", "yes", "y", "include", "included", "relevant"}
 _FALSE = {"0", "0.0", "false", "no", "n", "exclude", "excluded", "irrelevant"}
 
 RIS_TAGS = {"TI": "title", "T1": "title", "AB": "abstract", "N2": "abstract", "DO": "doi", "PY": "year",
             "Y1": "year", "DA": "year", "JO": "venue", "JF": "venue", "T2": "venue", "J2": "venue",
             "AU": "authors", "A1": "authors", "UR": "url"}
+_RIS_LINE = re.compile(r"^([A-Z][A-Z0-9])\s{1,2}-(?:\s(.*))?$")
+_LATEX = {'"': "̈", "'": "́", "`": "̀", "^": "̂", "~": "̃", "c": "̧"}
+
+
+def new_stats() -> dict:
+    return {"rows": 0, "skipped": 0, "skipped_included": 0, "unreadable_labels": 0, "label_column": None}
 
 
 def parse_label(value) -> int | None:
@@ -59,7 +68,14 @@ def _authors(value) -> list[str]:
     return [p.strip() for p in parts if p.strip()]
 
 
-def _paper(fields: dict, label) -> Paper | None:
+def _add(out: list, stats: dict, fields: dict, raw_label) -> None:
+    """Build one Paper; count it as skipped (and whether it was a labelled inclusion) when it is unusable."""
+    stats["rows"] += 1
+    lab = None
+    if raw_label not in (None, ""):
+        lab = parse_label(raw_label)
+        if lab is None:
+            stats["unreadable_labels"] += 1
     p = Paper(
         title=fields.get("title") or "",
         abstract=fields.get("abstract") or None,
@@ -71,153 +87,260 @@ def _paper(fields: dict, label) -> Paper | None:
         authors=_authors(fields.get("authors")),
         url=fields.get("url") or None,
     )
-    if label is not None:
-        p.extra["label"] = label
+    if lab is not None:
+        p.extra["label"] = lab
+    p.normalize()
     if not (p.title or p.doi or p.openalex_id or p.arxiv_id):
-        return None
-    return p.normalize()
+        stats["skipped"] += 1
+        stats["skipped_included"] += lab == 1
+        return
+    out.append(p)
 
 
-def read_table(path: str) -> list[Paper]:
+def _delimiter(header: str, path: str) -> str:
+    if path.lower().endswith(".tsv"):
+        return "\t"
+    counts = {d: header.count(d) for d in ("\t", ";", ",")}
+    return max(counts, key=lambda d: (counts[d], d == ","))
+
+
+def read_table(path: str, stats: dict, label_column: str | None = None) -> list[Paper]:
     with open(path, encoding="utf-8-sig", newline="") as f:
-        sample = f.read(4096)
+        header = f.readline()
         f.seek(0)
-        delimiter = "\t" if path.lower().endswith(".tsv") or sample.count("\t") > sample.count(",") else ","
-        reader = csv.DictReader(f, delimiter=delimiter)
+        delimiter = _delimiter(header, path)
+        # tab-delimited exports (Web of Science) contain stray quotes inside titles: don't treat them as quoting
+        quoting = csv.QUOTE_NONE if delimiter == "\t" else csv.QUOTE_MINIMAL
+        reader = csv.DictReader(f, delimiter=delimiter, quoting=quoting)
         headers = {h.strip().lower(): h for h in reader.fieldnames or [] if h}
         cols = {field: next((headers[n] for n in names if n in headers), None) for field, names in COLUMNS.items()}
-        label_col = next((headers[n] for n in LABEL_COLUMNS if n in headers), None)
+        if label_column:
+            label_col = headers.get(label_column.strip().lower())
+            if not label_col:
+                raise ValueError(f"{path}: no column named {label_column!r}")
+        else:
+            label_col = next((headers[n] for n in LABEL_COLUMNS if n in headers), None)
+        stats["label_column"] = label_col
         if not any(cols[k] for k in ("title", "doi", "openalex_id", "arxiv_id")):
             raise ValueError(f"{path}: no title, doi, openalex_id or arxiv_id column (found: {', '.join(headers)})")
-        out, skipped = [], 0
-        for row in reader:
-            fields = {k: (row.get(c) or "").strip() for k, c in cols.items() if c}
-            p = _paper(fields, parse_label(row.get(label_col)) if label_col else None)
-            if p:
-                out.append(p)
-            else:
-                skipped += 1
-        if skipped:
-            info(f"  {path}: skipped {skipped} rows with no title or identifier")
+        out: list[Paper] = []
+        try:
+            for row in reader:
+                fields = {k: (row.get(c) or "").strip() for k, c in cols.items() if c}
+                _add(out, stats, fields, row.get(label_col) if label_col else None)
+        except csv.Error as e:
+            raise ValueError(f"{path}: malformed CSV near line {reader.line_num}: {e}") from None
         return out
 
 
-def read_ris(path: str) -> list[Paper]:
-    out, fields, label = [], {}, None
+def read_ris(path: str, stats: dict, label_column: str | None = None) -> list[Paper]:
+    out: list[Paper] = []
+    fields: dict = {}
+    raw_label = None
+    last = None
+    started = False
+
+    def flush():
+        nonlocal fields, raw_label, last, started
+        if started:
+            _add(out, stats, fields, raw_label)
+        fields, raw_label, last, started = {}, None, None, False
+
     with open(path, encoding="utf-8-sig") as f:
         for line in f:
-            m = re.match(r"^([A-Z][A-Z0-9])  -\s?(.*)$", line.rstrip("\r\n"))
+            line = line.rstrip("\r\n")
+            m = _RIS_LINE.match(line)
             if not m:
+                if last and line.strip():  # continuation of a multi-line field (abstracts)
+                    if last == "authors":
+                        fields["authors"][-1] += " " + line.strip()
+                    else:
+                        fields[last] = (fields.get(last, "") + " " + line.strip()).strip()
                 continue
-            tag, value = m.group(1), m.group(2).strip()
-            if tag == "ER":
-                p = _paper(fields, label)
-                if p:
-                    out.append(p)
-                fields, label = {}, None
-            elif tag in RIS_TAGS:
+            tag, value = m.group(1), (m.group(2) or "").strip()
+            if tag == "TY":
+                flush()
+                started = True
+            elif tag == "ER":
+                flush()
+                continue
+            started = True
+            last = None
+            if tag in RIS_TAGS:
                 key = RIS_TAGS[tag]
                 if key == "authors":
                     fields.setdefault("authors", []).append(value)
-                else:
-                    fields.setdefault(key, value)
-            elif tag == "N1" and value.lower().startswith(("label:", "included:")):
-                label = parse_label(value.split(":", 1)[1])
+                    last = key
+                elif key not in fields:
+                    fields[key] = value
+                    last = key
+            elif tag == "N1" and re.match(r"^(label|included)\s*:", value, re.I):
+                raw_label = value.split(":", 1)[1]
+    flush()  # last record without ER
     return out
 
 
-def _bib_entries(text: str):
-    """Yield the field dict of each @type{key, ...} entry; handles nested braces and quoted values."""
+def _delatex(s: str) -> str:
+    """M{\\"o}ller -> Möller, {BibTeX} -> BibTeX, \\& -> &."""
+    s = re.sub(r"\{?\\([\"'`^~c])\{?([A-Za-z])\}?\}?",
+               lambda m: m.group(2) + _LATEX[m.group(1)], s)
+    s = re.sub(r"\\([&%$#_])", r"\1", s)
+    return re.sub(r"[{}]", "", s)
+
+
+def _bib_value(body: str, pos: int) -> tuple[str, int, bool]:
+    """Value starting at body[pos]; returns (value, position after it, balanced)."""
+    if body[pos] == "{":
+        depth, e = 0, pos
+        while e < len(body):
+            if body[e] == "\\":
+                e += 2
+                continue
+            depth += {"{": 1, "}": -1}.get(body[e], 0)
+            if depth == 0:
+                return body[pos + 1 : e], e + 1, True
+            e += 1
+        return body[pos + 1 :], len(body), False
+    if body[pos] == '"':
+        e, depth = pos + 1, 0
+        while e < len(body):
+            if body[e] == "\\":
+                e += 2
+                continue
+            if body[e] == '"' and depth == 0:
+                return body[pos + 1 : e], e + 1, True
+            depth += {"{": 1, "}": -1}.get(body[e], 0)
+            e += 1
+        return body[pos + 1 :], len(body), False
+    m = re.match(r"[^,}\s]*", body[pos:])
+    return m.group(0), pos + m.end(), True
+
+
+def _bib_entries(text: str, warn: list):
+    """Yield the field dict of each @type{key, ...} or @type(key, ...) entry, reading fields in order so an
+    "x = y" inside a value is never taken for a field."""
     i = 0
     while (start := text.find("@", i)) != -1:
-        brace = text.find("{", start)
-        if brace == -1:
-            return
-        kind = text[start + 1 : brace].strip().lower()
-        depth, j = 0, brace
+        m = re.match(r"@\s*([A-Za-z]+)\s*([{(])", text[start:])
+        if not m:
+            i = start + 1
+            continue
+        kind, opener = m.group(1).lower(), m.group(2)
+        closer = "}" if opener == "{" else ")"
+        j, depth = start + m.end() - 1, 0
         while j < len(text):
-            depth += {"{": 1, "}": -1}.get(text[j], 0)
-            if depth == 0:
-                break
+            if text[j] == "\\":
+                j += 2
+                continue
+            if text[j] == opener or (opener == "(" and text[j] == "{"):
+                depth += 1
+            elif text[j] == closer or (opener == "(" and text[j] == "}"):
+                depth -= 1
+                if depth == 0:
+                    break
             j += 1
-        body, i = text[brace + 1 : j], j + 1
+        if depth != 0:
+            warn.append(f"unbalanced braces in @{kind} entry starting at character {start}; rest of file ignored")
+            j = len(text)
+        body, i = text[start + m.end() : j], j + 1
         if kind in ("comment", "string", "preamble"):
             continue
-        fields, k = {}, body.find(",") + 1
-        for m in re.finditer(r"([A-Za-z_-]+)\s*=\s*", body[k:]):
-            pos = k + m.end()
-            if pos >= len(body):
+        fields: dict = {}
+        pos = body.find(",") + 1 if "," in body else len(body)
+        while pos < len(body):
+            fm = re.compile(r"\s*,?\s*([A-Za-z_][\w-]*)\s*=\s*").match(body, pos)
+            if not fm or fm.end() >= len(body):
                 break
-            if body[pos] == "{":
-                depth, e = 0, pos
-                while e < len(body):
-                    depth += {"{": 1, "}": -1}.get(body[e], 0)
-                    if depth == 0:
-                        break
-                    e += 1
-                value = body[pos + 1 : e]
-            elif body[pos] == '"':
-                e = body.find('"', pos + 1)
-                value = body[pos + 1 : e if e != -1 else len(body)]
-            else:
-                value = re.match(r"[^,}\s]*", body[pos:]).group(0)
-            fields.setdefault(m.group(1).lower(), re.sub(r"[{}]", "", " ".join(value.split())))
+            value, pos, ok = _bib_value(body, fm.end())
+            if not ok:
+                warn.append(f"unterminated value for field {fm.group(1)!r} in @{kind} entry")
+            fields.setdefault(fm.group(1).lower(), _delatex(" ".join(value.split())))
         yield fields
 
 
-def read_bibtex(path: str) -> list[Paper]:
+def read_bibtex(path: str, stats: dict, label_column: str | None = None) -> list[Paper]:
     with open(path, encoding="utf-8-sig") as f:
         text = f.read()
-    out = []
-    for e in _bib_entries(text):
+    out: list[Paper] = []
+    warn: list[str] = []
+    label_key = (label_column or "").lower()
+    for e in _bib_entries(text, warn):
+        is_arxiv = "arxiv" in ((e.get("archiveprefix") or "") + (e.get("eprinttype") or "")).lower()
         fields = {"title": e.get("title"), "abstract": e.get("abstract"), "doi": e.get("doi"),
-                  "year": e.get("year"), "venue": e.get("journal") or e.get("booktitle"),
+                  "year": e.get("year") or e.get("date"), "venue": e.get("journal") or e.get("booktitle"),
                   "authors": e.get("author"), "url": e.get("url"),
-                  "arxiv_id": e.get("eprint") if (e.get("archiveprefix") or "").lower() == "arxiv" else None}
-        p = _paper({k: v for k, v in fields.items() if v}, parse_label(e.get("label") or e.get("included")))
-        if p:
-            out.append(p)
+                  "arxiv_id": e.get("eprint") if is_arxiv else None}
+        raw = e.get(label_key) if label_key else (e.get("label") if e.get("label") is not None else e.get("included"))
+        _add(out, stats, {k: v for k, v in fields.items() if v}, raw)
+    for w in warn:
+        info(f"  {path}: {w}")
     return out
 
 
 READERS = {".csv": read_table, ".tsv": read_table, ".txt": read_table, ".ris": read_ris, ".bib": read_bibtex}
 
 
-def read_file(path: str) -> list[Paper]:
+def read_file(path: str, stats: dict | None = None, label_column: str | None = None) -> list[Paper]:
+    stats = new_stats() if stats is None else stats
     ext = os.path.splitext(path)[1].lower()
     if ext not in READERS:
-        raise ValueError(f"{path}: unsupported file type {ext!r} (use .csv, .tsv, .ris or .bib)")
-    return READERS[ext](path)
+        raise ValueError(f"{path}: unsupported file type {ext!r} (use .csv, .tsv, .txt, .ris or .bib)")
+    try:
+        papers = READERS[ext](path, stats, label_column)
+    except UnicodeDecodeError as e:
+        raise ValueError(f"{path}: not UTF-8 text ({e})") from None
+    if not papers and os.path.getsize(path) > 0:
+        raise ValueError(f"{path}: no records found")
+    if stats["skipped"]:
+        info(f"  {path}: skipped {stats['skipped']} rows with no title or identifier "
+             f"({stats['skipped_included']} of them labelled included)")
+    if stats["unreadable_labels"]:
+        info(f"  {path}: {stats['unreadable_labels']} label values not understood (kept unlabelled)")
+    return papers
 
 
 def fill_from_openalex(papers: list[Paper]) -> tuple[int, list[str]]:
-    """Fetch title/abstract/metadata for records that only carry identifiers. Returns (filled, errors)."""
+    """Fetch title/abstract/metadata for records that only carry identifiers. Returns (filled, errors).
+    A failing batch is reported and the remaining batches still run."""
     bare = [p for p in papers if not p.title]
     if not bare:
         return 0, []
     info(f"  fetching titles and abstracts for {len(bare)} records from OpenAlex")
-    errors, filled = [], 0
-    try:
-        by_oa = {p.openalex_id: p for p in bare if p.openalex_id}
-        for q in openalex.get_works(list(by_oa)):
-            p = by_oa.get(q.openalex_id or "")
-            if p is not None:
-                filled += _copy_metadata(p, q)
-        # merged or unknown OpenAlex ids: fall back to the DOI
-        by_doi = {p.doi: p for p in bare if p.doi and not p.title}
-        for q in openalex.lookup_dois(list(by_doi)):
-            p = by_doi.get(q.doi or "")
-            if p is not None:
-                filled += _copy_metadata(p, q)
-    except HttpError as e:
-        errors.append(f"OpenAlex: {e}")
+    errors: list[str] = []
+    filled = 0
+    by_oa: dict[str, list[Paper]] = {}
+    for p in bare:
+        if p.openalex_id:
+            by_oa.setdefault(p.openalex_id, []).append(p)
+    ids = list(by_oa)
+    for i in range(0, len(ids), 50):
+        try:
+            for q in openalex.get_works(ids[i : i + 50]):
+                for p in by_oa.get(q.openalex_id or "", []):
+                    filled += _copy_metadata(p, q)
+        except HttpError as e:
+            errors.append(f"OpenAlex ids batch {i // 50 + 1}: {e}")
+    # merged/unknown OpenAlex ids and records without one: by DOI (arXiv ids via their DataCite DOI)
+    by_doi: dict[str, list[Paper]] = {}
+    for p in bare:
+        if not p.title and openalex.doi_of(p):
+            by_doi.setdefault(openalex.doi_of(p), []).append(p)
+    dois = list(by_doi)
+    for i in range(0, len(dois), 50):
+        try:
+            for q in openalex.lookup_dois(dois[i : i + 50]):
+                for p in by_doi.get(openalex.doi_of(q) or "", []):
+                    filled += _copy_metadata(p, q)
+        except HttpError as e:
+            errors.append(f"OpenAlex DOI batch {i // 50 + 1}: {e}")
     return filled, errors
 
 
-def _copy_metadata(p: Paper, q: Paper) -> bool:
+def _copy_metadata(p: Paper, q: Paper) -> int:
+    had_title = bool(p.title)
     for name in ("title", "abstract", "doi", "openalex_id", "arxiv_id", "year", "venue", "authors", "url",
                  "pdf_url", "citation_count", "language", "type"):
         if getattr(p, name) in (None, "", []) and getattr(q, name) not in (None, "", []):
             setattr(p, name, getattr(q, name))
     p.normalize()
-    return bool(p.title)
+    return int(bool(p.title) and not had_title)

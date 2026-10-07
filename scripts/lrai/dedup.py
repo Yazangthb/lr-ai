@@ -22,6 +22,15 @@ def _years_compatible(a: Paper, b: Paper) -> bool:
     return a.year is None or b.year is None or abs(a.year - b.year) <= 1
 
 
+def _distinct_labelled(a: Paper, b: Paper) -> bool:
+    """Two labelled benchmark records with different DOIs or OpenAlex ids are different screened records,
+    however similar their titles ("drug A" vs "drug B" trials); merging them would change the benchmark."""
+    if a.extra.get("label") not in (0, 1) or b.extra.get("label") not in (0, 1):
+        return False
+    return bool((a.doi and b.doi and a.doi != b.doi) or
+                (a.openalex_id and b.openalex_id and a.openalex_id != b.openalex_id))
+
+
 def _published_rank(p: Paper) -> int:
     venue = (p.venue or "").lower()
     if venue and "arxiv" not in venue and "ssrn" not in venue and "rxiv" not in venue:
@@ -46,8 +55,10 @@ def merge_two(a: Paper, b: Paper) -> Paper:
     m.round = min(a.round, b.round)
     m.extra = {**other.extra, **primary.extra}
     labels = [x.extra["label"] for x in (a, b) if x.extra.get("label") in (0, 1)]
-    if labels:  # a human inclusion label survives a merge with an excluded duplicate
+    if labels:  # a human inclusion label survives a merge with an excluded duplicate; the conflict is flagged
         m.extra["label"] = max(labels)
+        if len(set(labels)) > 1 or a.extra.get("label_conflict") or b.extra.get("label_conflict"):
+            m.extra["label_conflict"] = True
     # manual edits (`lr.py set`) always win, whichever record they were made on
     manual_primary = set(primary.extra.get("manual") or [])
     manual_other = set(other.extra.get("manual") or [])
@@ -93,7 +104,8 @@ def group(papers: list[Paper]) -> list[list[int]]:
             j = seen.get(key)
             if j is None:
                 seen[key] = i
-            elif key.startswith("title:") and not _years_compatible(papers[j], p):
+            elif key.startswith("title:") and (not _years_compatible(papers[j], p)
+                                               or _distinct_labelled(papers[j], p)):
                 continue
             else:
                 union(i, j)
@@ -108,7 +120,7 @@ def group(papers: list[Paper]) -> list[list[int]]:
             for b in range(a + 1, len(idxs)):
                 i, j = idxs[a], idxs[b]
                 if find(i) != find(j) and titles[i] != titles[j] and _years_compatible(papers[i], papers[j]) \
-                        and similar_titles(titles[i], titles[j]):
+                        and not _distinct_labelled(papers[i], papers[j]) and similar_titles(titles[i], titles[j]):
                     union(i, j)
 
     groups: dict[int, list[int]] = {}
