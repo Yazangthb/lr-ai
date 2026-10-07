@@ -63,7 +63,7 @@ snowball:
   rounds: 1
   direction: both      # backward | forward | both
   backend: auto        # auto (OpenAlex, falls back to Semantic Scholar) | openalex | semantic_scholar
-  from: all            # all = every start-set paper; included = only papers screened core/skim
+  from: all            # all = every start-set paper; included = papers screened core/skim; core = core only
   max_references: 200  # per paper, most-cited first (null = all)
   max_citations: 50    # per paper, most-cited first
 

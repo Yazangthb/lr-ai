@@ -261,6 +261,8 @@ def cmd_snowball(args) -> None:
     def eligible(p: Paper) -> bool:
         if p.round != round_no - 1 or p.excluded_reason or blocked.intersection(p.dedup_keys()):
             return False
+        if source == "core":
+            return p.included and p.status == "core"
         return p.included if source == "included" else p.status != "exclude"
 
     frontier = [p for p in papers if eligible(p)]
@@ -680,7 +682,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = cmd("snowball", cmd_snowball, "Step 3: one round of backward/forward snowballing.")
     p.add_argument("--round", type=int, help="round number (default: next round)")
-    p.add_argument("--from", dest="source", choices=["all", "included"], help="default: snowball.from")
+    p.add_argument("--from", dest="source", choices=["all", "included", "core"],
+                   help="default: snowball.from")
     p.add_argument("--direction", choices=["backward", "forward", "both"])
     p.add_argument("--backend", choices=["auto", "openalex", "semantic_scholar"])
     p.add_argument("--max-references", type=int)

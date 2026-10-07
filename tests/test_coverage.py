@@ -97,3 +97,20 @@ def test_coverage_command(make_run, tmp_path, capsys):
     assert "Review: 2 included of 3 screened records" in out
     assert "kept in LR-AI's included list:     1 (0.500)" in out
     assert "top 5: 0.500" in out
+
+
+def test_snowball_from_core_only(make_run, monkeypatch):
+    run = make_run()
+    core = paper("A core paper about digital twins", doi="10.1/core")
+    skim = paper("A skim paper about digital twins", doi="10.1/skim")
+    core.status, skim.status = "core", "skim"
+    run.save([core, skim])
+    seen = []
+
+    def fake_round(frontier, *a, **k):
+        seen.extend(p.doi for p in frontier)
+        return [], {"references": 0, "citations": 0, "backend": {}, "unresolved": [], "failed": [], "errors": []}
+    monkeypatch.setattr(cli, "snowball_round", fake_round)
+    monkeypatch.setattr(cli, "complete_metadata", lambda papers, force=False: 0)
+    cli.main(["snowball", "--run", run.path, "--from", "core"])
+    assert seen == ["10.1/core"]
