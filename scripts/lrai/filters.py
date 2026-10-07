@@ -86,6 +86,9 @@ def exclusion_reason(p: Paper, f: dict, require_any=None, exclude_any=None, year
     min_hits = int(f.get("min_hits") or 0)
     if min_hits and p.round > 0 and p.hits < min_hits:
         return f"linked from fewer than {min_hits} papers"
+    snow_req = compile_terms(f.get("snowball_require_any")) if p.round > 0 else []
+    if snow_req and not any(rx.search(text) for _, rx in snow_req):
+        return "snowballed, none of the required keywords"
     return None
 
 

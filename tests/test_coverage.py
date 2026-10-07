@@ -17,6 +17,18 @@ def test_block_list_beats_protection_and_matches_all_id_kinds():
     assert ok.excluded_reason is None and counts == {"blocked": 4}
 
 
+def test_snowball_require_any_only_filters_snowballed_papers():
+    searched = paper("A survey of anomaly detection methods", found_via=["search:openalex:q1"])
+    snowballed = paper("A survey of anomaly detection methods", found_via=["backward:doi:10.1/x"], round=1)
+    snowballed_ok = paper("Digital twins for intrusion detection", found_via=["forward:doi:10.1/x"], round=1)
+    both = paper("Anomaly detection in power grids", found_via=["search:arxiv:q1", "backward:x"], round=0)
+    f = {"snowball_require_any": ["digital twin*"]}
+    filters.apply([searched, snowballed, snowballed_ok, both], f)
+    assert searched.excluded_reason is None and both.excluded_reason is None
+    assert snowballed.excluded_reason == "snowballed, none of the required keywords"
+    assert snowballed_ok.excluded_reason is None
+
+
 def test_blocked_paper_is_never_snowballed(make_run, monkeypatch):
     run = make_run('filters:\n  block: ["10.1/review"]\n')
     review = paper("The review being reproduced", doi="10.1/review")

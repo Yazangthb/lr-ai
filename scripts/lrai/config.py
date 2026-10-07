@@ -25,7 +25,8 @@ DEFAULTS: dict = {
         "citation_grace_years": 2, "require_abstract": False,
         "exclude_types": ["erratum", "editorial", "retraction", "paratext", "letter", "peer-review",
                           "supplementary-materials"],
-        "require_any": [], "exclude_any": [], "venue_exclude": [], "min_hits": 0, "block": [],
+        "require_any": [], "exclude_any": [], "venue_exclude": [], "min_hits": 0, "snowball_require_any": [],
+        "block": [],
     },
     "screening": {"batch_size": 25},
     "taxonomy": [],
@@ -78,6 +79,7 @@ filters:
   exclude_any: []      # drop papers whose title/abstract mentions any of these
   venue_exclude: []
   min_hits: 0          # snowballed papers must be linked from at least this many papers
+  snowball_require_any: []  # like require_any, but only for papers found by snowballing alone
   block: []            # papers that must never enter the review (DOI, arXiv id, OpenAlex id or exact title);
                        # e.g. the published review you are reproducing, so its reference list is not used
 
