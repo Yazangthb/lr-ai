@@ -188,6 +188,10 @@ def _delatex(s: str) -> str:
     return re.sub(r"[{}]", "", s)
 
 
+_BIB_START = re.compile(r"@\s*([A-Za-z]+)\s*([{(])")
+_BIB_FIELD = re.compile(r"\s*,?\s*([A-Za-z_][\w-]*)\s*=\s*")
+
+
 def _bib_value(body: str, pos: int) -> tuple[str, int, bool]:
     """Value starting at body[pos]; returns (value, position after it, balanced)."""
     if body[pos] == "{":
@@ -221,13 +225,13 @@ def _bib_entries(text: str, warn: list):
     "x = y" inside a value is never taken for a field."""
     i = 0
     while (start := text.find("@", i)) != -1:
-        m = re.match(r"@\s*([A-Za-z]+)\s*([{(])", text[start:])
+        m = _BIB_START.match(text, start)  # match in place: slicing the rest of the file per entry is quadratic
         if not m:
             i = start + 1
             continue
         kind, opener = m.group(1).lower(), m.group(2)
         closer = "}" if opener == "{" else ")"
-        j, depth = start + m.end() - 1, 0
+        j, depth = m.end() - 1, 0
         while j < len(text):
             if text[j] == "\\":
                 j += 2
@@ -242,13 +246,13 @@ def _bib_entries(text: str, warn: list):
         if depth != 0:
             warn.append(f"unbalanced braces in @{kind} entry starting at character {start}; rest of file ignored")
             j = len(text)
-        body, i = text[start + m.end() : j], j + 1
+        body, i = text[m.end() : j], j + 1
         if kind in ("comment", "string", "preamble"):
             continue
         fields: dict = {}
         pos = body.find(",") + 1 if "," in body else len(body)
         while pos < len(body):
-            fm = re.compile(r"\s*,?\s*([A-Za-z_][\w-]*)\s*=\s*").match(body, pos)
+            fm = _BIB_FIELD.match(body, pos)
             if not fm or fm.end() >= len(body):
                 break
             value, pos, ok = _bib_value(body, fm.end())
