@@ -8,6 +8,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
 from lrai import http  # noqa: E402
 from lrai.config import render_template  # noqa: E402
 from lrai.models import Paper  # noqa: E402
+from lrai.sources import openalex  # noqa: E402
 
 REAL_REQUEST = http.request  # for tests that drive the HTTP layer against a fake urlopen
 
@@ -18,6 +19,7 @@ def no_network(monkeypatch):
     def refuse(*args, **kwargs):
         raise AssertionError("network access in tests")
     monkeypatch.setattr(http, "request", refuse)
+    monkeypatch.setattr(openalex, "rate_limited", False)
     http.set_cache_dir(None)
 
 

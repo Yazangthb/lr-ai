@@ -21,8 +21,8 @@ wait for the user's reply.
 ## 1. Check the environment (once per session)
 Run `lr.py doctor`. If `yaml` or `openpyxl` is missing, install them with
 `python -m pip install -r "${CLAUDE_PLUGIN_ROOT}/requirements.txt"` (Claude Code asks the user to approve
-it). Mention missing API keys in one line and continue. They're optional, but `OPENALEX_API_KEY` (free)
-makes OpenAlex search reliable.
+it). Mention missing API keys in one line and continue. They're optional: LR-AI ships a shared OpenAlex
+key. If any command prints an `OPENALEX RATE LIMIT` notice, show it to the user word for word.
 
 ## 2. Frame the review
 Take the topic, research questions, criteria, year range and known papers from the user's request, and

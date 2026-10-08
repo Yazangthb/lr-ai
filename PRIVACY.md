@@ -36,7 +36,8 @@ deletes all of it.
 
 ## API keys and email
 
-`OPENALEX_API_KEY`, `S2_API_KEY` and `OPENALEX_EMAIL` are optional. LR-AI reads them from your environment
+`OPENALEX_API_KEY`, `S2_API_KEY` and `OPENALEX_EMAIL` are optional. Without `OPENALEX_API_KEY`, LR-AI
+sends OpenAlex a shared key built into the plugin. LR-AI reads them from your environment
 variables and sends each one only to the service it belongs to. It doesn't write them to the review folder:
 cached responses are stored under hashed names, and error messages mask them.
 

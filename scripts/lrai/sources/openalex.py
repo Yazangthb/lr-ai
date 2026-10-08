@@ -1,13 +1,47 @@
-"""OpenAlex API client (https://docs.openalex.org). Free; set OPENALEX_EMAIL for the faster polite pool
-and OPENALEX_API_KEY if you have one."""
+"""OpenAlex API client (https://docs.openalex.org). Free; set OPENALEX_EMAIL for the faster polite pool.
+LR-AI ships a shared API key; set OPENALEX_API_KEY to use your own instead."""
 from __future__ import annotations
 
 import os
 import urllib.parse
 
 from .. import query as q
-from ..http import NotFound, get_json
+from ..http import HttpError, NotFound, get_json
 from ..models import Paper, norm_arxiv
+from ..util import info
+
+# Shared key built into LR-AI, used when the user has not set OPENALEX_API_KEY.
+BUILTIN_API_KEY = "J18xW4EuZ867r29fFlAPRJ"
+KEY_STEPS = (
+    "To keep working, use your own free OpenAlex API key:\n"
+    "  1. Sign up at https://openalex.org/ and copy your API key from your account settings\n"
+    "     (help: https://help.openalex.org/api/authentication/).\n"
+    "  2. Set it as OPENALEX_API_KEY:\n"
+    "     - Windows: setx OPENALEX_API_KEY \"<your key>\"\n"
+    "     - macOS/Linux: add  export OPENALEX_API_KEY=<your key>  to your shell profile (~/.zshrc or ~/.bashrc)\n"
+    "     - Claude Code cloud session: add  OPENALEX_API_KEY=<your key>  under Environment variables in the\n"
+    "       cloud environment's settings\n"
+    "  3. Restart Claude Code and run the step again (finished API calls are cached, nothing is lost)."
+)
+_RATE_LIMIT_WORDS = ("rate limit", "budget", "quota", "credit", "api key", "too many requests")
+rate_limited = False  # set once OpenAlex refuses us for the rest of the day; the CLI then tells the user
+
+
+def api_key() -> str:
+    return os.environ.get("OPENALEX_API_KEY") or BUILTIN_API_KEY
+
+
+def rate_limit_notice() -> str:
+    whose = ("your OpenAlex API key (OPENALEX_API_KEY)" if os.environ.get("OPENALEX_API_KEY")
+             else "the shared OpenAlex API key built into LR-AI")
+    return (f"OPENALEX RATE LIMIT: OpenAlex stopped answering because the daily budget of {whose} is used up "
+            "(it resets at midnight UTC). LR-AI continues with the other databases, so results may be "
+            "incomplete.\n" + KEY_STEPS)
+
+
+def _is_rate_limit(e: HttpError) -> bool:
+    msg = str(e).lower()
+    return e.status == 429 or any(w in msg for w in _RATE_LIMIT_WORDS)
 
 BASE = "https://api.openalex.org"
 SELECT = (
@@ -21,13 +55,24 @@ def _params(extra: dict) -> dict:
     p = dict(extra)
     if os.environ.get("OPENALEX_EMAIL"):
         p["mailto"] = os.environ["OPENALEX_EMAIL"]
-    if os.environ.get("OPENALEX_API_KEY"):
-        p["api_key"] = os.environ["OPENALEX_API_KEY"]
+    p["api_key"] = api_key()
     return p
 
 
 def _get(path: str, params: dict) -> dict:
-    return get_json(BASE + path, _params(params), min_interval=MIN_INTERVAL)
+    global rate_limited
+    try:
+        return get_json(BASE + path, _params(params), min_interval=MIN_INTERVAL)
+    except NotFound:
+        raise
+    except HttpError as e:
+        if not _is_rate_limit(e):
+            raise
+        if not rate_limited:
+            rate_limited = True
+            info(rate_limit_notice())
+        raise HttpError(e.status, f"OpenAlex rate limit reached (see OPENALEX RATE LIMIT above): {e}",
+                        persistent=True) from None
 
 
 def rebuild_abstract(inverted: dict | None) -> str | None:

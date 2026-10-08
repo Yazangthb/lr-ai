@@ -44,6 +44,9 @@ Rules:
   records every step.
 - If an API is rate-limited or refuses anonymous access, the tool falls back to another source and
   says so. Mention once which API key would help, then continue.
+- If a command prints an `OPENALEX RATE LIMIT` notice, stop and show that notice to the user word
+  for word (what happened and the steps to set their own `OPENALEX_API_KEY`), then continue with the
+  other databases.
 - End with a short report:
   - the sheet URL (or the xlsx path), the PRISMA-style counts from `lr.py status`, and the run folder
   - in automatic mode, the choices you made, so the user can check them: research questions, criteria and

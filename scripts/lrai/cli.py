@@ -21,8 +21,6 @@ from .sources import semantic_scholar as s2
 from .util import info, shorten, slugify, today
 
 SEARCHERS = {"openalex": openalex.search, "semantic_scholar": s2.search, "arxiv": arxiv.search}
-OPENALEX_KEY_HINT = ("OpenAlex refused an anonymous request. Get a free API key at https://openalex.org/ and "
-                     "set OPENALEX_API_KEY (lookups/snowballing still work without one; search may not).")
 GOOGLE_ACCOUNT_VAR = "LR_AI_GOOGLE_ACCOUNT"
 
 
@@ -130,7 +128,7 @@ def cmd_doctor(args) -> None:
             print(f"  ⚠ {name}: {shorten(str(e), 160)}")
             degraded = True  # not fatal: every step falls back to another source
     for var, why in (("S2_API_KEY", "higher Semantic Scholar rate limit"),
-                     ("OPENALEX_API_KEY", "reliable OpenAlex search and a larger daily budget"),
+                     ("OPENALEX_API_KEY", "your own OpenAlex key; otherwise LR-AI's shared key is used"),
                      ("OPENALEX_EMAIL", "OpenAlex polite pool")):
         print(f"  {'✓' if os.environ.get(var) else '·'} {var} {'set' if os.environ.get(var) else 'not set'} ({why})")
     account = google_account()
@@ -220,7 +218,7 @@ def cmd_search(args) -> None:
             try:
                 res, total = SEARCHERS[src](q, limit=per_query, year_min=y0, year_max=y1)
             except HttpError as e:
-                msg = OPENALEX_KEY_HINT if src == "openalex" and "api key" in str(e).lower() else str(e)
+                msg = str(e)
                 errors.append(f"{src} {tag}{qi}: {msg}")
                 info(f"  {src} {tag}{qi} failed: {shorten(msg, 200)}")
                 continue
@@ -286,8 +284,6 @@ def cmd_snowball(args) -> None:
               f"`snowball --round {round_no}` later to retry them (completed calls are cached, so it is cheap).")
     for e in stats["errors"][:3]:
         print(f"  error: {shorten(e, 200)}")
-    if any("api key" in e.lower() for e in stats["errors"]):
-        print("  " + OPENALEX_KEY_HINT)
 
 
 def cmd_complete(args) -> None:
@@ -591,6 +587,9 @@ def main(argv: list[str] | None = None) -> int:
     except KeyboardInterrupt:
         info("Interrupted. Completed API calls are cached; re-run the command to resume.")
         return 130
+    finally:
+        if openalex.rate_limited:
+            print("\n" + openalex.rate_limit_notice())
     return 0
 
 

@@ -98,12 +98,12 @@ Google account.
 <summary><b>Optional: API keys and settings</b></summary>
 <br>
 
-Everything works without keys, but the public APIs are shared and sometimes throttle anonymous users. When a
+Everything works without keys (LR-AI ships a shared OpenAlex key), but the public APIs are shared and sometimes throttle anonymous users. When a
 service refuses a request, LR-AI falls back to another one and tells you.
 
 | Variable | Why | Where |
 |---|---|---|
-| `OPENALEX_API_KEY` | Reliable OpenAlex search and a larger daily budget | Free at [openalex.org](https://openalex.org) |
+| `OPENALEX_API_KEY` | Your own OpenAlex daily budget. LR-AI ships a shared key; if its budget runs out, LR-AI tells you how to set yours | Free at [openalex.org](https://openalex.org) |
 | `S2_API_KEY` | A dedicated Semantic Scholar rate limit | Free on request at [semanticscholar.org/product/api](https://www.semanticscholar.org/product/api) |
 | `OPENALEX_EMAIL` | OpenAlex polite pool | Your email |
 | `LR_AI_GOOGLE_ACCOUNT` | Which Composio Google account gets the sheets when several are connected (otherwise the first one) | The account's alias or id in Composio |

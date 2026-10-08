@@ -36,8 +36,9 @@ database, most relevant first.
 
 Fix such a query in `config.yaml` and run `search` once more. Unchanged queries are answered from the cache.
 
-Errors from one database don't stop the others. If OpenAlex refuses anonymous search, mention the free
-`OPENALEX_API_KEY` once and continue with the other databases.
+Errors from one database don't stop the others. If the output has an `OPENALEX RATE LIMIT` notice, show
+it to the user word for word (what happened and how to set their own `OPENALEX_API_KEY`), then continue
+with the other databases.
 
 ## 3. Report
 Run `lr.py status --run <dir>` and summarize it in one line: records per source, duplicates merged, unique

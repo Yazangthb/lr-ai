@@ -50,8 +50,8 @@ quoted phrases, parentheses, `*` prefix wildcard. Translated to each database's 
 
 ## Environment variables (optional)
 
-- `OPENALEX_API_KEY`: free at openalex.org. Without it, OpenAlex search may be paused under load and
-  lookups share a small daily budget.
+- `OPENALEX_API_KEY`: free at openalex.org. Without it, LR-AI uses its built-in shared key. If that key's
+  daily budget runs out, commands print an `OPENALEX RATE LIMIT` notice with the steps to set your own.
 - `S2_API_KEY`: free on request from Semantic Scholar. Without it, requests share a busy public pool.
 - `OPENALEX_EMAIL`: identifies you to OpenAlex (polite pool).
 - `LR_AI_GOOGLE_ACCOUNT`: alias or id of the Composio Google account that gets the sheet when several are

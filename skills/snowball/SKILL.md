@@ -41,7 +41,8 @@ number increments automatically. Stop when a round adds few new included papers 
 ## Notes
 - Every paper records who led to it (`found_via`: `backward:<parent>` / `forward:<parent>`). Papers
   linked from several start-set papers are strong candidates: `lr.py show --sort hits`.
-- If OpenAlex's anonymous daily budget runs out, the command switches to Semantic Scholar and says so.
-  Mention `OPENALEX_API_KEY` to the user once.
+- If OpenAlex's daily budget runs out, the command switches to Semantic Scholar and prints an
+  `OPENALEX RATE LIMIT` notice. Show it to the user word for word: it says what happened and how to set
+  their own `OPENALEX_API_KEY`.
 
 Next step: filtering and screening (skill `screen-papers`).

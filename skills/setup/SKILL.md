@@ -19,7 +19,8 @@ this skill's base directory.
    it).
 3. Report the result in a few lines. A ⚠ next to a database is not fatal: LR-AI falls back to the other
    databases. Mention the optional environment variables once:
-   - `OPENALEX_API_KEY`: free at openalex.org. Makes OpenAlex search reliable and raises the daily budget.
+   - `OPENALEX_API_KEY`: free at openalex.org. LR-AI ships a shared key; a personal key has its own daily
+     budget, so set one if OpenAlex reports a rate limit.
    - `S2_API_KEY`: free on request from Semantic Scholar. Gives a dedicated rate limit.
    - `OPENALEX_EMAIL`: identifies the user to OpenAlex (polite pool).
    - `LR_AI_GOOGLE_ACCOUNT`: the alias or id of the Composio Google account that gets the sheets, when
