@@ -112,3 +112,18 @@ def test_engine_commit_is_none_without_its_own_git_checkout(monkeypatch, tmp_pat
     monkeypatch.setattr(runmod, "_git", lambda *a: str(tmp_path) if a[0] == "rev-parse" and "--show-toplevel" in a else "abc")
     assert runmod.engine_commit() is None  # an enclosing repository is not LR-AI's own
     runmod.engine_commit.cache_clear()
+
+
+def test_each_config_version_is_kept_and_batches_carry_provenance(make_run):
+    run = make_run()
+    run.log("seed", "first")
+    with open(run.file("config.yaml"), "a", encoding="utf-8") as f:
+        f.write("\n# edited\n")
+    run.log("search", "second")
+    shas = [e["provenance"]["config_sha"] for e in run.runlog()]
+    assert len(set(shas)) == 2
+    for sha in shas:
+        assert open(run.file("configs", sha + ".yaml"), encoding="utf-8").read().startswith("# LR-AI")
+    assert run.runlog()[0]["provenance"]["screener_prompt_sha"]  # the agent file ships with the code
+    (batch,) = screening.write_batches(run, "screen", [paper(doi="10.1/0")], size=10)
+    assert read_meta(batch)["provenance"]["config_sha"] == shas[1]

@@ -46,6 +46,21 @@ def engine_commit() -> str | None:
     return sha + ("+dirty" if dirty else "") if sha else None
 
 
+def _sha(data: bytes | None) -> str | None:
+    return hashlib.sha256(data).hexdigest()[:12] if data is not None else None
+
+
+@functools.lru_cache(maxsize=1)
+def screener_prompt_sha() -> str | None:
+    """Hash of agents/paper-screener.md shipped with this code (line endings normalised). Screening runs in Claude
+    Code with the *installed* plugin's agent, so this matches only when that plugin comes from the same version."""
+    try:
+        with open(os.path.join(ENGINE_ROOT, "agents", "paper-screener.md"), "rb") as f:
+            return _sha(f.read().replace(b"\r\n", b"\n"))
+    except OSError:
+        return None
+
+
 class Run:
     def __init__(self, path: str, use_cache: bool = True):
         self.path = os.path.abspath(path)
@@ -75,13 +90,25 @@ class Run:
         return path
 
     def provenance(self) -> dict:
-        """What produced this step: LR-AI version, engine commit and a hash of config.yaml (for reproducibility)."""
+        """What produced this step: LR-AI version, engine commit, a hash of config.yaml and of the screening agent's
+        prompt. Each config version is kept as configs/<hash>.yaml, so every step can be matched to its settings."""
         try:
-            with open(self.file("config.yaml"), "rb") as f:  # line endings normalised: CRLF and LF hash alike
-                config_sha = hashlib.sha256(f.read().replace(b"\r\n", b"\n")).hexdigest()[:12]
+            with open(self.file("config.yaml"), "rb") as f:
+                data = f.read().replace(b"\r\n", b"\n")  # line endings normalised: CRLF and LF hash alike
         except OSError:
-            config_sha = None  # a locked or missing file must not stop the step from being logged
-        return {"lrai": __version__, "commit": engine_commit(), "config_sha": config_sha}
+            data = None  # a locked or missing file must not stop the step from being logged
+        config_sha = _sha(data)
+        if config_sha:
+            snapshot = self.file("configs", config_sha + ".yaml")
+            if not os.path.exists(snapshot):
+                try:
+                    os.makedirs(os.path.dirname(snapshot), exist_ok=True)
+                    with open(snapshot, "wb") as f:
+                        f.write(data)
+                except OSError:
+                    pass  # the hash is still logged; only the copy is missing
+        return {"lrai": __version__, "commit": engine_commit(), "config_sha": config_sha,
+                "screener_prompt_sha": screener_prompt_sha()}
 
     def log(self, stage: str, summary: str, **data) -> None:
         now = datetime.datetime.now().isoformat(timespec="seconds")

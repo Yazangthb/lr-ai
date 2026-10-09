@@ -56,6 +56,7 @@ def write_batches(run, stage: str, papers: list[Paper], size: int) -> list[str]:
         "research_questions": cfg.get("research_questions") or [],
         "inclusion_criteria": cfg.get("inclusion_criteria") or [],
         "exclusion_criteria": cfg.get("exclusion_criteria") or [],
+        "provenance": run.provenance(),  # which settings and screening prompt this batch was written with
     }
     if stage == "enrich":
         base_meta["taxonomy"] = cfg.get("taxonomy") or []
