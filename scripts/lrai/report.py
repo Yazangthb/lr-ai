@@ -94,3 +94,21 @@ def next_step(s: dict, cfg: dict) -> str:
             return "Define the taxonomy in config.yaml, then: batches --stage enrich"
         return "Run: batches --stage enrich"
     return "Run: export"
+
+
+def provenance(run, papers) -> dict:
+    """Models per stage (from the papers) and versions/commits/date range (from the run log)."""
+    models: dict[str, dict[str, int]] = {}
+    for p in papers:
+        for stage in ("screen", "enrich"):
+            m = p.extra.get(f"{stage}_model")
+            if m:
+                models.setdefault(stage, {})
+                models[stage][m] = models[stage].get(m, 0) + 1
+    log = run.runlog()
+    provs = [e.get("provenance") or {} for e in log]
+    commits = list(dict.fromkeys(c for c in (pv.get("commit") for pv in provs) if c))
+    versions = list(dict.fromkeys(v for v in (pv.get("lrai") for pv in provs) if v))
+    times = [e.get("time") for e in log if e.get("time")]
+    return {"models": models, "commits": commits, "versions": versions,
+            "first": min(times) if times else None, "last": max(times) if times else None}

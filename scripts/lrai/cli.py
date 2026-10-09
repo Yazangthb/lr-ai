@@ -341,7 +341,7 @@ def cmd_batches(args) -> None:
 def cmd_apply(args) -> None:
     run = _run(args)
     papers = run.load()
-    rep = screening.apply_results(run, args.stage, papers, replay_all=args.all)
+    rep = screening.apply_results(run, args.stage, papers, replay_all=args.all, model=args.model)
     run.save(papers)
     screening.save_state(run, args.stage, rep["state"])
     live = [p for p in papers if not p.excluded_reason]
@@ -352,8 +352,11 @@ def cmd_apply(args) -> None:
         done = sum(1 for p in live if p.included and p.summary)
         summary = f"enrichment applied: {done} of {sum(1 for p in live if p.included)} included papers summarized"
     run.log(f"apply {args.stage}", summary, applied=rep["applied"], missing=rep["missing"],
-            problems=rep["problems"][:50])
+            problems=rep["problems"][:50], model=(args.model or "unknown") if rep["applied"] else None)
     print(summary + f" ({rep['applied']} new results from {rep['files']} new or changed result files).")
+    if rep["applied"] and not args.model:
+        print("Note: no --model given, so these results are recorded as model 'unknown'. "
+              "Pass e.g. --model claude-haiku-5-5 to keep the run reproducible.")
     if rep["missing"]:
         print("Batches with missing results (re-run these):")
         for batch, ids in rep["missing"].items():
@@ -595,6 +598,16 @@ def cmd_status(args) -> None:
     for label, n in report.flow_rows(s):
         print(f"  {label}: {n}")
     print(f"  Summarized (enriched): {s['enriched']}")
+    prov = report.provenance(run, papers)
+    if prov["models"] or prov["versions"]:
+        print("Provenance:")
+        for stage, models in prov["models"].items():
+            print(f"  {stage} model: " + ", ".join(f"{m} ({n} papers)" for m, n in models.items()))
+        if prov["versions"]:
+            commits = ", ".join(prov["commits"]) or "not recorded"
+            print(f"  LR-AI: {', '.join(prov['versions'])}; code commit(s): {commits}")
+        if prov["first"]:
+            print(f"  logged steps: {prov['first']} to {prov['last']}")
     print("Next: " + report.next_step(s, run.config))
 
 
@@ -704,6 +717,8 @@ def build_parser() -> argparse.ArgumentParser:
     p = cmd("apply", cmd_apply, "Merge new subagent result files into papers.jsonl (manual `set` edits win).")
     p.add_argument("--stage", choices=screening.STAGES, required=True)
     p.add_argument("--all", action="store_true", help="re-apply result files that were already applied")
+    p.add_argument("--model", help="model that produced these results, recorded per paper and in the log "
+                   "(e.g. claude-haiku-5-5)")
 
     p = cmd("show", cmd_show, "List papers (filter with --where key=value).")
     p.add_argument("--where", action="append", help="e.g. status=core, included=true, found=forward, round=1")

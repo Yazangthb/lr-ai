@@ -12,6 +12,18 @@ from lrai.models import Paper  # noqa: E402
 REAL_REQUEST = http.request  # for tests that drive the HTTP layer against a fake urlopen
 
 
+def pytest_configure(config):
+    config.addinivalue_line("markers", "real_git: test uses the real engine_commit (git)")
+
+
+@pytest.fixture(autouse=True)
+def fixed_commit(request, monkeypatch):
+    """Run-log provenance must not call the real git in tests (slow, depends on the checkout state)."""
+    if "real_git" not in request.keywords:
+        from lrai import run as runmod
+        monkeypatch.setattr(runmod, "engine_commit", lambda: "testsha")
+
+
 @pytest.fixture(autouse=True)
 def no_network(monkeypatch):
     """Tests must never hit the real APIs."""

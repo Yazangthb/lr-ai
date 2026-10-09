@@ -127,8 +127,11 @@ def _state_path(run, stage: str) -> str:
     return os.path.join(run.file(stage), "applied.json")
 
 
-def apply_results(run, stage: str, papers: list[Paper], replay_all: bool = False) -> dict:
+def apply_results(run, stage: str, papers: list[Paper], replay_all: bool = False, model: str | None = None) -> dict:
     """Merge new or changed *.result.jsonl files of a stage into `papers` (later batches win).
+
+    Each applied paper records the model that produced its result in extra["<stage>_model"] ("unknown"
+    when `model` is not given), so mixed-model runs stay traceable.
 
     Result files already applied are skipped (tracked in <stage>/applied.json by size and mtime), so an
     old result never overwrites a later decision; `replay_all` re-applies everything. Call save_state()
@@ -177,6 +180,8 @@ def apply_results(run, stage: str, papers: list[Paper], replay_all: bool = False
                             continue
                         if _apply_one(p, r, stage, firsts, report["problems"]):
                             got.add(p.id)
+                            key = f"{stage}_model"  # without --model, keep a model recorded earlier
+                            p.extra[key] = model or p.extra.get(key) or "unknown"
                             report["applied"] += 1
         missing = [i for i in wanted if i in by_id and by_id[i].id not in got and _still_pending(by_id[i], stage)]
         if missing:
