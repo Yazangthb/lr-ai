@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 
 try:
     import yaml
@@ -137,3 +138,58 @@ def taxonomy_names(cfg: dict) -> tuple[list[str], dict[str, list[str]]]:
             firsts.append(name)
             seconds[name] = [str(c).strip() for c in children if str(c).strip()]
     return firsts, seconds
+
+
+# Settings profiles: `standard` keeps result lists manageable; `wide` trades screening effort for recall (no
+# citation-count threshold for snowballed papers, all references, more citing papers and search results).
+# Topic-specific filters (years, keywords, block list) are never touched by a profile.
+PROFILES: dict[str, dict[str, dict]] = {
+    "standard": {
+        "seed": {"per_query": 20},
+        "search": {"per_query": 100},
+        "snowball": {"from": "all", "max_references": 200, "max_citations": 50},
+        "filters": {"min_hits": 0},
+    },
+    "wide": {
+        "seed": {"per_query": 30},
+        "search": {"per_query": 500},
+        "snowball": {"from": "included", "max_references": None, "max_citations": 200},
+        "filters": {"min_hits": 1},
+    },
+}
+
+
+def _yaml_scalar(value) -> str:
+    return "null" if value is None else (json.dumps(value) if isinstance(value, str) else str(value))
+
+
+def set_values(text: str, section: str, values: dict) -> str:
+    """Set `section.key: value` lines in config.yaml text, keeping comments and layout (keys missing from the
+    section are appended to it; a missing section is appended at the end)."""
+    lines = text.splitlines()
+    start = next((i for i, ln in enumerate(lines) if re.match(rf"^{re.escape(section)}:\s*(#.*)?$", ln)), None)
+    if start is None:
+        return text.rstrip("\n") + f"\n\n{section}:\n" + "".join(
+            f"  {k}: {_yaml_scalar(v)}\n" for k, v in values.items())
+    end = next((i for i in range(start + 1, len(lines)) if lines[i] and not lines[i][0].isspace()
+                and not lines[i].lstrip().startswith("#")), len(lines))
+    for key, value in values.items():
+        rx = re.compile(rf"^(\s+){re.escape(key)}:(\s*)([^#]*?)(\s*#.*)?$")
+        for i in range(start + 1, end):
+            m = rx.match(lines[i])
+            if m and len(m.group(1)) == 2:
+                lines[i] = f"{m.group(1)}{key}: {_yaml_scalar(value)}{m.group(4) or ''}"
+                break
+        else:
+            lines.insert(end, f"  {key}: {_yaml_scalar(value)}")
+            end += 1
+    return "\n".join(lines) + ("\n" if text.endswith("\n") else "")
+
+
+def apply_profile(text: str, name: str) -> str:
+    if name not in PROFILES:
+        raise SystemExit(f"Unknown profile {name!r}. Choose from: {', '.join(PROFILES)}")
+    for section, values in PROFILES[name].items():
+        text = set_values(text, section, values)
+    return re.sub(r"^profile:.*$", f"profile: {name}", text, flags=re.M) if re.search(r"^profile:", text, re.M) \
+        else text.replace("\n", f"\nprofile: {name}            # settings preset (lr.py profile); edit values freely\n", 1)

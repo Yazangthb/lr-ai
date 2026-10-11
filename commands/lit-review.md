@@ -35,6 +35,10 @@ briefly, and wait for the user's go-ahead or corrections.
 
 Rules:
 - Pass `--run <dir>` to every `lr.py` command once the run exists. Keep all review state in the run folder.
+- If the user wants the most complete result ("don't miss anything", "wide", "maximum recall"), create the run with
+  `lr.py init ... --profile wide` (or `lr.py profile wide --run <dir>` later, then `filter`). It keeps snowballed
+  papers linked from a single paper, takes all references and more citing papers and search results, so screening
+  takes noticeably more subagents. Say so, and give the expected number of papers to screen after `filter`.
 - Settings in the request override the defaults. Write each one to `config.yaml` before the step that uses it:
   year range (`filters.year_min` / `year_max`), papers per query (`seed.per_query`, `search.per_query`),
   databases (`search.sources`), snowball rounds, direction and limits (`snowball.direction`,

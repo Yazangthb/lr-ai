@@ -7,6 +7,7 @@ import os
 import sys
 
 from . import __version__, filters, report, screening
+from . import config as cfgmod
 from .complete import complete_metadata
 from .config import render_template, taxonomy_names
 from .dedup import dedup, merge_into
@@ -95,11 +96,27 @@ def cmd_init(args) -> None:
     while os.path.exists(path):
         path, k = f"{base}-{k}", k + 1
     os.makedirs(path)
+    text = render_template(args.topic, today())
+    if args.profile:
+        text = cfgmod.apply_profile(text, args.profile)
     with open(os.path.join(path, "config.yaml"), "w", encoding="utf-8", newline="\n") as f:
-        f.write(render_template(args.topic, today()))
+        f.write(text)
     with open(os.path.join(path, "log.md"), "w", encoding="utf-8") as f:
         f.write(f"# Review log: {args.topic}\n\n")
     print(f"Created run: {path}\nNext: fill in config.yaml (research questions, criteria, seed queries), then run `seed`.")
+
+
+def cmd_profile(args) -> None:
+    path = os.path.join(_run(args).path, "config.yaml")
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+    new = cfgmod.apply_profile(text, args.name)
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
+        f.write(new)
+    run = _run(args)  # reload, so the log records the new config
+    changes = "; ".join(f"{sec}.{k}={v}" for sec, vals in cfgmod.PROFILES[args.name].items() for k, v in vals.items())
+    run.log("profile", f"settings profile '{args.name}': {changes}", profile=args.name)
+    print(f"Applied profile '{args.name}' to {path}:\n  {changes}\nRe-run `filter` so the new filters take effect.")
 
 
 def cmd_doctor(args) -> None:
@@ -676,10 +693,14 @@ def build_parser() -> argparse.ArgumentParser:
         p.set_defaults(func=fn)
         return p
 
+    p = cmd("profile", cmd_profile, "Switch a run's settings preset: standard, or wide (maximum recall: snowballed "
+            "papers kept even if linked from one paper, all references, more results). Keeps your other settings.")
+    p.add_argument("name", choices=sorted(cfgmod.PROFILES))
     p = cmd("init", cmd_init, "Create a run folder with a config.yaml template.", run=False)
     p.add_argument("topic")
     p.add_argument("--root", default="lr-runs")
     p.add_argument("--name", help="short name for the folder (default: from topic)")
+    p.add_argument("--profile", choices=sorted(cfgmod.PROFILES), help="settings preset (default: standard)")
 
     cmd("doctor", cmd_doctor, "Check dependencies, API reachability and API keys.", run=False)
 
