@@ -152,7 +152,7 @@ PROFILES: dict[str, dict[str, dict]] = {
     },
     "wide": {
         "seed": {"per_query": 30},
-        "search": {"per_query": 500},
+        "search": {"per_query": 3000},  # in effect: all matches for most topic queries
         "snowball": {"from": "included", "max_references": None, "max_citations": 200},
         "filters": {"min_hits": 1},
     },

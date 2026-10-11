@@ -12,7 +12,7 @@ def test_wide_profile_changes_only_its_keys_and_keeps_comments():
     assert cfg["profile"] == "wide"
     assert cfg["filters"]["min_hits"] == 1 and cfg["snowball"]["max_references"] is None
     assert cfg["snowball"]["from"] == "included" and cfg["snowball"]["max_citations"] == 200
-    assert cfg["search"]["per_query"] == 500 and cfg["seed"]["per_query"] == 30
+    assert cfg["search"]["per_query"] == 3000 and cfg["seed"]["per_query"] == 30
     assert cfg["filters"]["require_any"] == ["digital twin*"]  # topic filters untouched
     assert "# snowballed papers must be linked from at least this many papers" in wide
     back = yaml.safe_load(cfgmod.apply_profile(wide, "standard"))
