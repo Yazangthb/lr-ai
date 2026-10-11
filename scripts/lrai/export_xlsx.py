@@ -21,6 +21,8 @@ def write_xlsx(tabs: list[Tab], path: str) -> None:
     def font(hex_color: str | None, bold: bool = False, size: int | None = None, **kw) -> Font:
         return Font(color=hex_color.lstrip("#") if hex_color else None, bold=bold, size=size, **kw)
 
+    import math
+
     top = Alignment(vertical="top")
     top_wrap = Alignment(vertical="top", wrap_text=True)
     wb = Workbook()
@@ -66,6 +68,16 @@ def write_xlsx(tabs: list[Tab], path: str) -> None:
             elif kind == "paper" and level:
                 ws.row_dimensions[ri].outline_level = level
 
+        if tab.table_row is not None:  # phase tab: notes span the table width, the paper list is filterable
+            chars = sum(tab.widths[1:]) / 7
+            for ri, (kind, row) in enumerate(zip(tab.kinds, tab.rows), 1):
+                if kind == "kv" and ncols > 2:
+                    ws.merge_cells(start_row=ri, start_column=2, end_row=ri, end_column=ncols)
+                    lines = sum(max(1, math.ceil(len(line) / chars)) for line in str(row[1]).split("\n"))
+                    ws.row_dimensions[ri].height = 15 * lines + 3
+            header = tab.table_row + 1
+            ws.freeze_panes = f"B{header + 1}"
+            ws.auto_filter.ref = f"A{header}:{last}{len(tab.rows)}"
         if tab.name != "Papers":
             continue
         n = len(tab.rows)

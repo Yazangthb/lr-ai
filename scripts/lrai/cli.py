@@ -454,6 +454,7 @@ def sheet_title(run: Run) -> str:
 
 
 def cmd_export(args) -> None:
+    from . import layout
     from .export_xlsx import write_xlsx
     run = _run(args)
     papers, tabs = _tabs(run)
@@ -461,7 +462,7 @@ def cmd_export(args) -> None:
     if not included:
         raise SystemExit("No included papers yet (screen first).")
     out = args.out or run.file("papers.xlsx")
-    write_xlsx(tabs, out)
+    write_xlsx(tabs + layout.phase_tabs(papers, run.config, report.stats(run, papers)), out)
     run.log("export", f"{len(included)} papers → {os.path.basename(out)}")
     print(f"Wrote {out} ({len(included)} papers, {len(tabs[0].rows) - 1} rows incl. category rows).")
     for row, kind in zip(tabs[0].rows, tabs[0].kinds):

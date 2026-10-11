@@ -2,7 +2,9 @@
 
 Papers tab: one row per included paper, grouped under category rows ("▌ Category — N papers") and
 sub-category rows ("▸ Sub-category (N)"), like a hand-made review sheet. Overview and Method tabs summarize
-the review. Colors live here so both exporters look the same.
+the review. The Excel file adds one tab per phase (seed search, database search, snowballing, filtering,
+screening) listing the papers that phase produced, under a short note on what was done. Colors live here so
+both exporters look the same.
 """
 from __future__ import annotations
 
@@ -81,6 +83,7 @@ class Tab:
     links: dict = field(default_factory=dict)  # (row, col) -> url
     wrap_cols: list[int] = field(default_factory=list)
     columns: list[Column] = field(default_factory=list)
+    table_row: int | None = None  # row index of a table header to freeze and filter below (phase tabs)
 
     def add(self, kind: str, values: list) -> int:
         self.rows.append(values)
@@ -271,3 +274,149 @@ def method_tab(cfg: dict, stats: dict) -> Tab:
 def build(papers: list[Paper], cfg: dict, stats: dict) -> list[Tab]:
     columns = select_columns((cfg.get("export") or {}).get("columns"))
     return [papers_tab(papers, cfg, columns), overview_tab(papers, cfg), method_tab(cfg, stats)]
+
+
+# ---------------------------------------------------------------- phase tabs (Excel only)
+
+PHASE_COLUMNS = [("Title", 360, True), ("Year", 55, False), ("Venue", 190, True), ("Citations", 75, False)]
+TAIL_COLUMNS = [("Outcome", 200, True), ("Link", 230, False), ("ID", 170, False)]
+
+
+def outcome(p: Paper) -> str:
+    """Where the paper ended up, in plain words."""
+    if p.excluded_reason:
+        return f"removed by filter: {p.excluded_reason}"
+    if p.status == "exclude":
+        return "excluded at screening"
+    if p.status in ("core", "skim"):
+        return f"included ({p.status})"
+    return "not screened yet"
+
+
+def _query_labels(queries, prefix: str) -> dict[str, str]:
+    return {f"{prefix}{i}": f"{prefix}{i}: {q}" for i, q in enumerate(queries or [], 1)}
+
+
+def _phase_tab(name: str, title: str, notes: list[tuple[str, str]], extra: list[tuple[str, int, bool]],
+               rows: list[tuple[Paper, list]]) -> Tab:
+    cols = PHASE_COLUMNS + extra + TAIL_COLUMNS
+    n = len(cols)
+    tab = Tab(name, [w for _, w, _ in cols], wrap_cols=[i for i, (_, _, wrap) in enumerate(cols) if wrap])
+    tab.add("title", [title] + [""] * (n - 1))
+    for k, v in notes:
+        if v not in ("", None):
+            tab.add("kv", [k, v] + [""] * (n - 2))
+    tab.add("blank", [""] * n)
+    tab.table_row = tab.add("header", [c for c, _, _ in cols])
+    link_col = n - 2
+    for p, values in rows:
+        r = tab.add("paper", [p.title, p.year or "", p.venue or "",
+                              p.citation_count if p.citation_count is not None else ""]
+                    + values + [outcome(p), p.link or "", p.id])
+        if p.link:
+            tab.links[(r, link_col)] = p.link
+    return tab
+
+
+def _by_citations(papers):
+    return sorted(papers, key=lambda p: (-(p.citation_count or 0), p.title.lower()))
+
+
+def phase_tabs(papers: list[Paper], cfg: dict, stats: dict) -> list[Tab]:
+    """One tab per phase: what was done, then every paper that phase produced and where it ended up."""
+    ident = stats["identified"]
+    tabs = []
+
+    seed_labels = _query_labels(cfg["seed"].get("queries"), "q")
+    seeds = [p for p in papers if any(v.startswith("seed:") for v in p.found_via)]
+    if seeds:
+        def seed_from(p):
+            tags = [v.split(":", 1)[1] for v in p.found_via if v.startswith("seed:")]
+            return "\n".join(dict.fromkeys("known paper" if t == "known" else seed_labels.get(t, t) for t in tags))
+        tabs.append(_phase_tab("1 Seed search", "Phase 1 — Seed search", [
+            ("What was done", "Natural-language queries sent to Semantic Scholar (falling back to OpenAlex, then "
+                              "arXiv when a service was unavailable), plus papers you already knew. Off-topic seeds "
+                              "were marked excluded."),
+            ("Seed queries", "\n".join(seed_labels.values())),
+            ("Known papers", _lines(cfg["seed"].get("papers"))),
+            ("Results kept per query", str(cfg["seed"].get("per_query") or "")),
+            ("Papers found", len(seeds)),
+        ], [("Found by", 280, True)], [(p, [seed_from(p)]) for p in _by_citations(seeds)]))
+
+    search_labels = _query_labels(cfg["search"].get("queries"), "q")
+    found = [p for p in papers if any(v.startswith("search:") for v in p.found_via)]
+    if found:
+        def search_from(p):
+            hits = [v.split(":")[1:] for v in p.found_via if v.startswith("search:")]
+            dbs = ", ".join(dict.fromkeys(KIND_NAMES.get(h[0], h[0]) for h in hits))
+            qs = "\n".join(dict.fromkeys(search_labels.get(h[1], h[1]) for h in hits if len(h) > 1))
+            return [dbs, qs]
+        per_db = ", ".join(f"{KIND_NAMES.get(k, k)} {ident[k]}" for k in ("openalex", "semantic_scholar", "arxiv")
+                           if ident.get(k))
+        tabs.append(_phase_tab("2 Database search", "Phase 2 — Database search", [
+            ("What was done", "Boolean keyword queries translated for each database and run within the year "
+                              "range; the most relevant results were kept per query and database."),
+            ("Queries", "\n".join(search_labels.values())),
+            ("Databases", ", ".join(KIND_NAMES.get(s, s) for s in cfg["search"].get("sources") or [])),
+            ("Results kept per query", str(cfg["search"].get("per_query") or "")),
+            ("Records per database", per_db),
+            ("Unique papers", len(found)),
+        ], [("Database", 130, True), ("Query", 300, True)], [(p, search_from(p)) for p in _by_citations(found)]))
+
+    snowballed = [p for p in papers if p.round > 0]
+    if snowballed:
+        titles = {p.id: p.title for p in papers}
+        sb = cfg["snowball"]
+
+        def snow_from(p):
+            dirs = ", ".join(k for k in ("backward", "forward") if k in p.found_kinds)
+            parents = list(dict.fromkeys(v.split(":", 1)[1] for v in p.found_via
+                                         if v.startswith(("backward:", "forward:"))))
+            shown = "\n".join(titles.get(i, i) for i in parents[:3])
+            return [dirs.replace("backward", "reference of").replace("forward", "cites"), p.hits, p.round,
+                    shown + (f"\n… and {len(parents) - 3} more" if len(parents) > 3 else "")]
+        tabs.append(_phase_tab("3 Snowballing", "Phase 3 — Snowballing", [
+            ("What was done", "For each start paper, collected the papers it cites (backward: 'reference of') and "
+                              "the papers that cite it (forward: 'cites'), most cited first."),
+            ("Start set", "papers included at screening" if sb.get("from") == "included"
+                          else "all seed and database papers that passed the filters"),
+            ("Settings", f"{sb.get('direction')}; up to {sb.get('max_references') or 'all'} references and "
+                         f"{'all' if sb.get('max_citations') is None else sb.get('max_citations')} citing papers "
+                         f"per paper"),
+            ("Records", f"{ident.get('backward', 0)} references + {ident.get('forward', 0)} citing papers"),
+            ("New unique papers", len(snowballed)),
+        ], [("Relation", 120, True), ("Linked from (papers)", 90, False), ("Round", 60, False),
+            ("Linked from", 360, True)],
+            [(p, snow_from(p)) for p in sorted(snowballed, key=lambda p: (-p.hits, -(p.citation_count or 0)))]))
+
+    passed = [p for p in papers if not p.excluded_reason]
+    tabs.append(_phase_tab("4 Filtering", "Phase 4 — Automatic filters", [
+        ("What was done", "Rule-based filters applied to every unique paper. Papers you added yourself are never "
+                          "removed."),
+        ("Filters", _filters_text(cfg["filters"])),
+        ("Unique papers", len(papers)),
+        ("Removed", stats["filtered_out"]),
+        ("Passed", len(passed)),
+    ], [("Filter result", 220, True)],
+        [(p, ["passed" if not p.excluded_reason else p.excluded_reason])
+         for p in passed + _by_citations([p for p in papers if p.excluded_reason])]))
+
+    screened = [p for p in passed if p.status]
+    if screened:
+        order = {"core": 0, "skim": 1, "exclude": 2}
+        tabs.append(_phase_tab("5 Screening", "Phase 5 — Title & abstract screening", [
+            ("What was done", "An LLM read each title and abstract against the criteria: core = directly "
+                              "relevant, skim = partially relevant, exclude = off-topic or hits an exclusion "
+                              "criterion. The included papers continue in the Papers tab."),
+            ("Inclusion criteria", _lines(cfg.get("inclusion_criteria"))),
+            ("Exclusion criteria", _lines(cfg.get("exclusion_criteria"))),
+            ("Screened", len(screened)),
+            ("Core / skim / excluded", f"{stats['core']} / {stats['skim']} / {stats['excluded_at_screening']}"),
+        ], [("Decision", 80, False), ("Reason", 280, True), ("Relevance", 75, False)],
+            [(p, [p.status, p.status_reason or "", p.relevance if p.relevance is not None else ""])
+             for p in sorted(screened, key=lambda p: (order.get(p.status, 3), -(p.relevance or 0),
+                                                       -(p.citation_count or 0)))]))
+    return tabs
+
+
+KIND_NAMES = {"openalex": "OpenAlex", "semantic_scholar": "Semantic Scholar", "arxiv": "arXiv"}

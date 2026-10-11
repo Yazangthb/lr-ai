@@ -115,3 +115,47 @@ def test_gsheets_rules_cover_groups_status_priority_and_reading(make_run):
     formulas = [c["arguments"]["rule"]["booleanRule"]["condition"]["values"][0]["userEnteredValue"]
                 for c in files["rules"] if c["tool_slug"].endswith("CONDITIONAL_FORMAT_RULES")]
     assert '=LEFT($A2,1)="▌"' in formulas and '=$D2="studied"' in formulas
+
+
+def phase_papers():
+    seed = paper("A seed paper on citation forecasting", doi="10.2/1", found_via=["seed:q1"], status="core",
+                 citation_count=5)
+    db = paper("A database paper on citation forecasting", doi="10.2/2", found_via=["search:openalex:q1"],
+               status="exclude", status_reason="off-topic")
+    snow = paper("A snowballed paper on citation forecasting", doi="10.2/3", round=1,
+                 found_via=["backward:doi:10.2/1", "forward:doi:10.2/2"], excluded_reason="published before 2018")
+    return [seed, db, snow]
+
+
+def test_phase_tabs_list_each_phase_with_notes_and_outcomes(make_run, tmp_path):
+    run = make_run("seed:\n  queries: [citation forecasting]\n")
+    papers = phase_papers()
+    stats = {"identified": {"seed": 1, "openalex": 1, "backward": 1, "forward": 1}, "filtered_out": 1,
+             "core": 1, "skim": 0, "excluded_at_screening": 1}
+    tabs = layout.phase_tabs(papers, run.config, stats)
+    assert [t.name for t in tabs] == ["1 Seed search", "2 Database search", "3 Snowballing", "4 Filtering",
+                                      "5 Screening"]
+    by_name = {t.name: t for t in tabs}
+    for tab in tabs:
+        assert tab.rows[0][0].startswith("Phase") and tab.kinds[1] == "kv"  # title, then what was done
+        assert tab.kinds[tab.table_row] == "header"
+
+    def table(name):
+        t = by_name[name]
+        return [dict(zip(t.rows[t.table_row], r)) for r, k in zip(t.rows, t.kinds) if k == "paper"]
+
+    assert table("1 Seed search")[0]["Found by"] == "q1: citation forecasting"
+    assert table("1 Seed search")[0]["Outcome"] == "included (core)"
+    assert table("2 Database search")[0]["Database"] == "OpenAlex"
+    snow = table("3 Snowballing")[0]
+    assert snow["Relation"] == "reference of, cites" and snow["Linked from (papers)"] == 2
+    assert "A seed paper" in snow["Linked from"]
+    assert {r["Filter result"] for r in table("4 Filtering")} == {"passed", "published before 2018"}
+    assert [r["Decision"] for r in table("5 Screening")] == ["core", "exclude"]
+
+    path = str(tmp_path / "phases.xlsx")
+    write_xlsx(tabs, path)
+    ws = openpyxl.load_workbook(path)["3 Snowballing"]
+    header = by_name["3 Snowballing"].table_row + 1
+    assert ws.auto_filter.ref.startswith(f"A{header}:") and ws.freeze_panes == f"B{header + 1}"
+    assert any(str(r).startswith("B2:") for r in ws.merged_cells.ranges)  # the note spans the table

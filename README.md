@@ -40,6 +40,7 @@ From a research question to a categorized, summarized Google Sheet of papers, in
 | **Papers** | One row per included paper, grouped by category and sub-category. Status (core or skim, with the screening reason), priority, a reading-status dropdown (marking a paper studied highlights its row), notes, reviewer, summaries, the RQ it informs, how it was found, and links. Frozen header, filters on every column. |
 | **Overview** | Papers per category and sub-category, per year, and the top venues. |
 | **Method** | Topic, research questions, criteria, every query, the databases, snowballing settings, filters and a PRISMA-style flow (identified → duplicates → filtered → screened → included), ready for a methods section. |
+| **1 Seed search … 5 Screening** | Excel only: one tab per phase listing every paper that phase produced, under a note on what was done (queries, settings, counts), with each paper's outcome (removed by which filter, excluded at screening, or included). |
 
 The same workbook is saved as `papers.xlsx` in the run folder. Without Composio, import it into Google Sheets
 (File → Import) and the formatting carries over.

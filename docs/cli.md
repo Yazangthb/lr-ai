@@ -14,7 +14,7 @@ under `./lr-runs`. Progress goes to stderr; a short summary goes to stdout.
 | `filter` | 4a | Applies the deterministic `filters` from config (recomputed every time) |
 | `batches --stage screen\|enrich [--size N] [--force]` | 4b / 5 | Writes self-describing batch files for `paper-screener` subagents |
 | `apply --stage screen\|enrich [--all]` | 4b / 5 | Merges new or changed `*.result.jsonl` files into `papers.jsonl`, reports missing results. Manual `set` edits always win |
-| `export [--out file.xlsx]` | 6 | Writes the styled workbook (Papers, Overview, Method tabs) |
+| `export [--out file.xlsx]` | 6 | Writes the styled workbook (Papers, Overview, Method, plus one tab per phase) |
 | `sheet-plan --spreadsheet-id ID [--sheet-id 0] [--account ACC]` | 6 | Writes the Composio calls that build the Google Sheet (`--account` defaults to `LR_AI_GOOGLE_ACCOUNT`) |
 | `status` | any | PRISMA-style counts and the suggested next step |
 | `show [--where k=v] [--fields a,b] [--sort citations] [--limit N]` | any | Lists papers (`--where status=core`, `included=true`, `found=forward`, `round=1`) |

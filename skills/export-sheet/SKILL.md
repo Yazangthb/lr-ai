@@ -19,12 +19,15 @@ wait for the user's reply.
 
 ## 1. Excel file (always)
 `lr.py export --run <dir>` writes `<run>/papers.xlsx` and prints the Google Sheet title, plus the Google
-account if `LR_AI_GOOGLE_ACCOUNT` is set. The workbook has three tabs:
+account if `LR_AI_GOOGLE_ACCOUNT` is set. The workbook has these tabs:
 - **Papers**: category and sub-category header rows, papers sorted core → skim, then priority, then
   citations. Status and priority are color-coded. Reading-status and priority columns have dropdowns. There
   is a filter, and the header row and title column are frozen.
 - **Overview**: counts by category, year and venue.
 - **Method**: queries, sources, filters and the PRISMA-style flow.
+- **1 Seed search, 2 Database search, 3 Snowballing, 4 Filtering, 5 Screening** (Excel only): the papers
+  each phase produced, under a note on what was done, with each paper's outcome. The Google Sheet leaves
+  them out to keep it small.
 
 ## 2. Google Sheet via Composio (if available)
 Composio tools are named like `mcp__<id>__COMPOSIO_*`. If none are present, skip to step 3.

@@ -160,7 +160,7 @@ python scripts/lr.py sheet-plan --spreadsheet-id TEST        # writes <run>/expo
 
 Check:
 - open `papers.xlsx`: category rows, colored status and priority, dropdowns, filter, and the Overview and
-  Method tabs
+  Method tabs, and one tab per phase (1 Seed search … 5 Screening)
 - the plan files in `export/gsheets/` are the exact Composio calls that build the Google Sheet
 
 To test the export without screening, mark a few papers by hand first:
