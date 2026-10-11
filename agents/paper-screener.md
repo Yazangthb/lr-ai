@@ -21,7 +21,10 @@ You process one batch file for a literature review. The prompt gives you its pat
 Each line: `{"id": ..., "status": "core|skim|exclude", "reason": "...", "relevance": 0.0-1.0, "short_summary": "..."}`
 - **core**: directly addresses at least one research question and meets the inclusion criteria.
 - **skim**: related work, a useful method or dataset, background, or only partially relevant.
-- **exclude**: off-topic, or matches an exclusion criterion.
+- **exclude**: clearly off-topic, or the title and abstract clearly show that an exclusion criterion applies.
+- This is a first pass, and a relevant paper excluded here is lost for good, while a wrongly kept one costs a
+  quick read later. When a paper touches the topic but the title and abstract leave it unclear whether it
+  meets the criteria or an exclusion applies, choose skim, not exclude.
 - With no abstract, judge from the title. Choose skim when it is plausibly relevant but unclear.
 - `reason`: at most 12 words, specific (e.g. "GNN predicts citation counts from citation graph").
 - `short_summary`: one sentence of at most 25 words on what the paper does. Use "" for excluded papers.
