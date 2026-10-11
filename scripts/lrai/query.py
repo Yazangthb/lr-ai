@@ -86,6 +86,13 @@ def keywords(text: str) -> str:
     return " ".join(w for w in words if w and w.lower() not in STOPWORDS and w.upper() not in OPERATORS)
 
 
+def truncated_terms(query: str) -> list[str]:
+    """Words written with a wildcard (attack*, resilien*). OpenAlex has none, so it searches the bare stem as a
+    word: fine for a whole word (it matches 'attack', 'attacks', 'attacked'), but a cut-off stem such as
+    'resilien' matches nothing."""
+    return [val for kind, val in tokenize(query) if kind == "TERM" and val.endswith("*") and val.rstrip("*")]
+
+
 def to_openalex(query: str) -> str:
     """OpenAlex boolean search: AND/OR/NOT, quotes, parentheses; no wildcards, no commas."""
     parts = []

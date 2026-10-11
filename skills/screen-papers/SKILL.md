@@ -23,7 +23,9 @@ how many papers await screening. Screening takes about one subagent per 25 paper
 400 papers unless the user gave another limit. If more remain, tighten the filters in this order, re-running
 `filter` after each change, until the rest fits:
 1. `min_hits: 2`: snowballed papers must be linked from at least 2 start-set papers
-2. `require_any`: 3-8 core terms of the topic, with `*` for word stems, e.g. `["citation*", "bibliometric*"]`
+2. `require_any`: 3-8 core terms of the topic, with `*` for word stems, e.g. `["citation*", "bibliometric*"]`.
+   Cover the variants authors use: a leading `*` also matches inside words, so `*twin*` keeps "Cybertwin" and
+   "cyber-physical twin", which `digital twin*` would drop. The same holds for `snowball_require_any`
 3. `min_citations` (e.g. 5); `citation_grace_years` keeps recent papers exempt
 
 Keep track of what you tightened for the final report.

@@ -14,13 +14,15 @@ PROTECTED = ("seed:known", "manual")
 
 
 def _term_regex(term: str) -> re.Pattern:
-    """'citation graph' also matches 'citation graphs'; 'predict*' matches 'prediction', 'predicting', ..."""
+    """'citation graph' also matches 'citation graphs'; 'predict*' matches 'prediction', 'predicting', ...;
+    a leading * matches inside a word: '*twin*' matches 'Cybertwin', 'cyber-physical twins', 'TwinNet'."""
     term = str(term).strip().strip('"').lower()
-    prefix = term.endswith("*")
-    words = [re.escape(w) for w in term.rstrip("*").split()]
+    prefix, suffix = term.endswith("*"), term.startswith("*")
+    words = [re.escape(w) for w in term.strip("*").split()]
     body = r"[\s-]+".join(words)
     # lookarounds instead of \b, so terms that start or end with symbols ("c++", "C#", ".NET") still match
-    return re.compile(r"(?<!\w)" + body + (r"\w*" if prefix else r"(?:s|es)?(?!\w)"), re.I)
+    start = r"\w*" if suffix else r"(?<!\w)"
+    return re.compile(start + body + (r"\w*" if prefix else r"(?:s|es)?(?!\w)"), re.I)
 
 
 def compile_terms(terms) -> list[tuple[str, re.Pattern]]:

@@ -76,7 +76,7 @@ filters:
   citation_grace_years: 2   # papers younger than this are exempt from min_citations
   require_abstract: false
   exclude_types: [erratum, editorial, retraction, paratext, letter, peer-review, supplementary-materials]
-  require_any: []      # keep only papers whose title/abstract mentions one of these (supports prefix*)
+  require_any: []      # keep only papers whose title/abstract mentions one of these (prefix*, *inside*)
   exclude_any: []      # drop papers whose title/abstract mentions any of these
   venue_exclude: []
   min_hits: 0          # snowballed papers must be linked from at least this many papers

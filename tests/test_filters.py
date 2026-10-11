@@ -66,3 +66,10 @@ def test_apply_sets_and_clears_reasons():
     assert papers[0].excluded_reason == "published before 2019"
     assert papers[1].excluded_reason is None
     assert counts == {"published before 2019": 1}
+
+
+def test_leading_wildcard_matches_inside_words():
+    rx = filters._term_regex("*twin*")
+    for text in ("A Cybertwins architecture", "a cyber-physical twin approach", "Tiny Twins for attacks"):
+        assert rx.search(text)
+    assert not rx.search("twain") and not filters._term_regex("digital twin*").search("Cybertwin testbed")

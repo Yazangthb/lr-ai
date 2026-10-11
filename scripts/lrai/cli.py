@@ -13,7 +13,7 @@ from .config import render_template, taxonomy_names
 from .dedup import dedup, merge_into
 from .http import HttpError
 from .models import PRIORITIES, STATUSES, Paper
-from .query import keywords
+from .query import keywords, truncated_terms
 from .resolve import resolve
 from .run import Run
 from .snowball import snowball_round
@@ -230,6 +230,11 @@ def cmd_search(args) -> None:
         raise SystemExit(f"Unknown source(s): {', '.join(unknown)}. Choose from: {', '.join(SEARCHERS)}")
     y0, y1 = _year_bounds(run)
     per_query = args.limit or int(cfg.get("per_query") or 100)
+    stems = list(dict.fromkeys(t for q in queries for t in truncated_terms(q)))
+    if "openalex" in sources and stems:
+        info(f"  note: OpenAlex has no wildcards, so {', '.join(stems)} are searched as the bare words. That is fine "
+             "for a whole word (attack* finds attacks, attacked), but a cut-off stem (resilien*) finds nothing: "
+             "write the full word there (resilience OR resilient).")
     by_source: dict[str, list[Paper]] = {s: [] for s in sources}
     totals, errors = {}, []
     for qi, q in enumerate(queries, 1):
@@ -560,6 +565,10 @@ def cmd_coverage(args) -> None:
         print(f"    top {k}: {_fmt(v)}")
     print(f"  share of the review's screened records that LR-AI also found: {_fmt(r['overlap_with_review_screened'])}")
     print("  found by: " + ", ".join(f"{k} {v}" for k, v in r["found_by_stage"].items()))
+    if r["fuzzy_matches"]:
+        print(f"  matched by a reworded title ({len(r['fuzzy_matches'])}, please check):")
+        for m in r["fuzzy_matches"][: args.show]:
+            print(f"    {shorten(m['review_title'], 70)}  ->  {shorten(m['run_title'], 70)}")
     if r["missed"]:
         print(f"Included in the review but not in LR-AI's included list ({len(r['missed'])}):")
         for m in r["missed"][: args.show]:

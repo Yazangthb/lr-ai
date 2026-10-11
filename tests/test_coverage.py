@@ -114,3 +114,25 @@ def test_snowball_from_core_only(make_run, monkeypatch):
     monkeypatch.setattr(cli, "complete_metadata", lambda papers, force=False: 0)
     cli.main(["snowball", "--run", run.path, "--from", "core"])
     assert seen == ["10.1/core"]
+
+
+def test_reworded_titles_match_only_close_variants_and_are_reported():
+    def gold_rec(title, year):
+        g = paper(title, year=year)
+        g.extra["label"] = 1
+        return g
+    gold = [gold_rec("Epictwin: An Electric Power Digital Twin for Cyber Security Testing, Research and Education", 2021),
+            gold_rec("Digital Twins in Livestock Farming. Animals 2021, 11, 1008", 2021),
+            gold_rec("Framework for a Digital Twin of the Canal of Calais", 2020)]
+    run = [paper("An electric power digital twin for cyber security testing, research and education",
+                 doi="10.1/epic", year=2022, found_via=["search:openalex:q1"]),
+           paper("Digital Twins in Livestock Farming", doi="10.3390/ani11041008", year=2021, found_via=["backward:x"]),
+           paper("Framework for the development of a Network Digital Twin", doi="10.1/net", year=2020,
+                 found_via=["search:openalex:q1"])]
+    for p in run:
+        p.status, p.relevance = "core", 0.5
+    r = evaluate.coverage(run, gold)
+    assert r["found_in_run"] == 2 and r["kept_by_lrai"] == 2
+    assert {m["run_id"] for m in r["fuzzy_matches"]} == {"doi:10.1/epic", "doi:10.3390/ani11041008"}
+    assert [m["title"] for m in r["missed"]] == ["Framework for a Digital Twin of the Canal of Calais"]
+    assert r["extras_count"] == 1  # only the network-twin paper; the two matched papers are not "never screened"

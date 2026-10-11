@@ -13,10 +13,11 @@ Undefined values (e.g. recall without any included paper) are None, never 0.
 from __future__ import annotations
 
 import math
+import re
 from collections import Counter
 
-from .dedup import group
-from .models import Paper
+from .dedup import _NUMBERING, group
+from .models import Paper, norm_title
 
 RULES = ("core", "core+skim")
 _ORDER = {"core": 0, "skim": 1, "exclude": 2}
@@ -170,6 +171,48 @@ def _coverage_rank(p: Paper) -> tuple:
     return (_ORDER[p.status], -(p.relevance if p.relevance is not None else 0.0))
 
 
+def _words(title: str | None) -> set[str]:
+    return set(re.findall(r"[a-z0-9]{3,}", norm_title(title)))
+
+
+def _fuzzy_fill(papers: list[Paper], unmatched: list[dict], rank_of: dict, taken: set[int]) -> list[dict]:
+    """Second chance for included studies that no identifier or near-identical title ties to the run: the same
+    paper under a reworded title. Seen in practice: a preprint merged with its journal version ("EPICTWIN: An
+    electric power digital twin ..." vs "An electric power digital twin ..."), and an answer-key title with the
+    citation glued on ("Digital Twins in Livestock Farming. Animals 2021, 11, 1008"). Matches when most words
+    are shared (>= 75% of the longer title, at least 4 words) or the run's title (>= 25 characters) starts the
+    review's title; years at most one apart, numbers in the titles equal ("Part I" vs "Part II" never match), and
+    the run paper not already tied to another record of the review. Each match is reported, so a person can
+    check it."""
+    if not unmatched:
+        return []
+    run_words = [_words(p.title) for p in papers]
+    run_titles = [norm_title(p.title) for p in papers]
+    found = []
+    for r in unmatched:
+        g = r["gold"]
+        gw, gt = _words(g.title), norm_title(g.title)
+        best, score = None, 0.0
+        for i, p in enumerate(papers):
+            if i in taken or g.year and p.year and abs(g.year - p.year) > 1:
+                continue
+            prefix = len(run_titles[i]) >= 25 and gt.startswith(run_titles[i])
+            if not prefix and _NUMBERING.findall(gt) != _NUMBERING.findall(run_titles[i]):
+                continue
+            shared = len(gw & run_words[i])
+            s = shared / max(len(gw), len(run_words[i]) or 1) if shared >= 4 else 0.0
+            if prefix:
+                s = max(s, 0.99)
+            if s >= 0.75 and (s > score or s == score and best is not None and rank_of[i] < rank_of[best]):
+                best, score = i, s
+        if best is not None:
+            taken.add(best)
+            r["run"], r["rank"] = best, rank_of[best]
+            found.append({"review_title": g.title, "run_title": papers[best].title, "run_id": papers[best].id,
+                          "score": round(score, 2)})
+    return found
+
+
 def coverage(papers: list[Paper], gold: list[Paper], at: list[int] | None = None) -> dict:
     """How much of a published review LR-AI reproduces when it searched on its own.
 
@@ -185,6 +228,7 @@ def coverage(papers: list[Paper], gold: list[Paper], at: list[int] | None = None
     rank_of = {i: r for r, i in enumerate(order, 1)}
     rows = []  # one per gold record group
     extras = []
+    taken: set[int] = set()  # run papers tied to some record of the review
     for idxs in group(combined):
         run_idx = [i for i in idxs if i < n]
         gold_idx = [i for i in idxs if i >= n]
@@ -192,11 +236,14 @@ def coverage(papers: list[Paper], gold: list[Paper], at: list[int] | None = None
             if any(papers[i].included for i in run_idx):
                 extras.append(min(run_idx, key=lambda i: rank_of[i]))
             continue
+        taken.update(run_idx)
         lab = max(label(combined[i]) for i in gold_idx)
         best = min(run_idx, key=lambda i: rank_of[i]) if run_idx else None
         rows.append({"label": lab, "gold": combined[gold_idx[0]], "run": best,
                      "rank": rank_of[best] if best is not None else None})
     positives = [r for r in rows if r["label"] == 1]
+    fuzzy = _fuzzy_fill(papers, [r for r in positives if r["run"] is None], rank_of, taken)
+    extras = [i for i in extras if i not in taken]  # a reworded match is not a paper the review never saw
     total = len(positives)
     in_run = [r for r in positives if r["run"] is not None]
     kept = [r for r in in_run if papers[r["run"]].included]
@@ -230,6 +277,7 @@ def coverage(papers: list[Paper], gold: list[Paper], at: list[int] | None = None
         "recall_at": {str(k): _ratio(sum(1 for r in in_run if r["rank"] <= k), total) for k in sizes},
         "overlap_with_review_screened": _ratio(sum(1 for r in rows if r["run"] is not None), len(rows)),
         "found_by_stage": dict(stage),
+        "fuzzy_matches": fuzzy,
         "missed": missed,
         "extras_count": len(extras),
         "extras": [{"id": papers[i].id, "title": papers[i].title, "status": papers[i].status,

@@ -22,6 +22,9 @@ Read `config.yaml` (topic, RQs, criteria) and a sample of the seed papers
 (`lr.py show --fields title,short_summary --limit 30`). Write 1-4 boolean queries:
 - one OR-group per concept, joined with AND: `("citation network" OR "citation graph") AND (forecast* OR predict*)`
 - quote multi-word phrases; use `*` for word stems; add `NOT` only for clear noise (e.g. `NOT protein`)
+- put `*` only after a whole word (`attack*`, `predict*`). OpenAlex has no wildcards: it searches the stem as a
+  word and matches its forms, so a cut-off stem (`resilien*`) finds nothing there. Write such words out:
+  `(resilience OR resilient)`
 - use uppercase AND / OR / NOT. The tool translates the query for each database.
 
 Put them in `search.queries`. `search.per_query` (default 100) caps the results kept per query per

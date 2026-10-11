@@ -35,3 +35,7 @@ def test_plain_flattening_drops_negated_parts():
 
 def test_lowercase_operators_are_terms():
     assert q.to_openalex("graph and network") == "graph AND and AND network"
+
+
+def test_truncated_terms_lists_wildcard_words_only():
+    assert q.truncated_terms('(attack* OR resilien*) AND "penetration test*" AND twin') == ["attack*", "resilien*"]
