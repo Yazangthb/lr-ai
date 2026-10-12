@@ -83,6 +83,11 @@ def test_coverage_counts_recall_at_n_stages_and_extras():
     assert r["found_by_stage"] == {"search only": 1, "snowballing only": 1, "search and snowballing": 1}
     assert [m["why"] for m in r["missed"]] == ["screened out: ", "never found"]
     assert r["extras_count"] == 1 and r["extras"][0]["id"] == "doi:10.8/new"
+    s = r["studies"]
+    assert [x["run_id"] for x in s] == ["doi:10.9/0", "doi:10.9/1", "doi:10.9/2", None]
+    assert [(x["found_by_search"], x["found_by_snowballing"]) for x in s] == [
+        (True, False), (False, True), (True, True), (False, False)]
+    assert [x["included"] for x in s] == [True, True, False, False] and s[2]["status"] == "exclude"
 
 
 def test_coverage_command(make_run, tmp_path, capsys):

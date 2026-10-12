@@ -595,7 +595,7 @@ def cmd_coverage(args) -> None:
     with open(out, "w", encoding="utf-8") as f:
         json.dump(r, f, ensure_ascii=False, indent=1)
     run.log("coverage", f"coverage against {os.path.basename(args.labels)} written to {os.path.basename(out)}",
-            **{k: v for k, v in r.items() if k not in ("missed", "extras")})
+            **{k: v for k, v in r.items() if k not in ("missed", "extras", "studies")})
     print(f"Wrote {out}")
 
 

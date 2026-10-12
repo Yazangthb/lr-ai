@@ -259,6 +259,16 @@ def coverage(papers: list[Paper], gold: list[Paper], at: list[int] | None = None
         snow = bool(kinds & {"backward", "forward"})
         searched = bool(kinds - {"backward", "forward"})
         stage["search and snowballing" if snow and searched else "snowballing only" if snow else "search only"] += 1
+    studies = []  # one row per included study of the review: where LR-AI has it and what happened to it
+    for r in positives:
+        p = papers[r["run"]] if r["run"] is not None else None
+        kinds = set(p.found_kinds) if p else set()
+        studies.append({
+            "title": r["gold"].title, "id": r["gold"].id, "doi": r["gold"].doi, "year": r["gold"].year,
+            "run_id": p.id if p else None, "rank": r["rank"],
+            "found_by_search": bool(kinds - {"backward", "forward"}), "found_by_snowballing": bool(kinds & {"backward", "forward"}),
+            "excluded_reason": p.excluded_reason if p else None, "status": p.status if p else None,
+            "status_reason": p.status_reason if p else None, "included": bool(p and p.included)})
     missed = []
     for r in positives:
         if r["run"] is None:
@@ -285,6 +295,7 @@ def coverage(papers: list[Paper], gold: list[Paper], at: list[int] | None = None
         "newest_included_year": newest,
         "run_included_after_newest": after,
         "missed": missed,
+        "studies": studies,
         "extras_count": len(extras),
         "extras": [{"id": papers[i].id, "title": papers[i].title, "status": papers[i].status,
                     "relevance": papers[i].relevance} for i in sorted(extras, key=lambda i: rank_of[i])],
