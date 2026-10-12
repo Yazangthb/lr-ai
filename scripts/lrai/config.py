@@ -22,7 +22,7 @@ DEFAULTS: dict = {
         "max_references": 200, "max_citations": 50,
     },
     "filters": {
-        "year_min": None, "year_max": None, "languages": ["en"], "min_citations": 0,
+        "year_min": None, "year_max": None, "date_min": None, "date_max": None, "languages": ["en"], "min_citations": 0,
         "citation_grace_years": 2, "require_abstract": False,
         "exclude_types": ["erratum", "editorial", "retraction", "paratext", "letter", "peer-review",
                           "supplementary-materials"],
@@ -71,6 +71,8 @@ snowball:
 filters:
   year_min: null
   year_max: null
+  date_min: null       # exact cut-offs as YYYY-MM-DD, e.g. the search date of a review being reproduced
+  date_max: null
   languages: [en]      # papers with unknown language are kept
   min_citations: 0
   citation_grace_years: 2   # papers younger than this are exempt from min_citations

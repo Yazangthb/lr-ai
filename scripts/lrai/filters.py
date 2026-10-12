@@ -48,9 +48,38 @@ def block_keys(items) -> set[str]:
     return keys
 
 
+def _date_reason(p: Paper, f: dict) -> str | None:
+    """date_min / date_max (YYYY-MM-DD, e.g. a review's search date). Compared on the precision both sides have
+    ("2024-01" passes date_max 2024-01-31). Without a date only the year can decide, so papers from the cut-off
+    year itself stay in (`lr.py complete --dates` looks their dates up)."""
+    dmin, dmax = (str(f[k]) if f.get(k) else None for k in ("date_min", "date_max"))
+    if dmax:
+        if p.published:
+            n = min(len(p.published), len(dmax))
+            if p.published[:n] > dmax[:n]:
+                return f"published after {dmax}"
+        elif p.year and p.year > int(dmax[:4]):
+            return f"published after {dmax}"
+    if dmin:
+        if p.published:
+            n = min(len(p.published), len(dmin))
+            if p.published[:n] < dmin[:n]:
+                return f"published before {dmin}"
+        elif p.year and p.year < int(dmin[:4]):
+            return f"published before {dmin}"
+    return None
+
+
+def undated_in_cutoff_years(papers: list[Paper], f: dict) -> list[Paper]:
+    """Papers a date filter cannot decide yet: no publication date, published in a cut-off year."""
+    years = {int(str(f[k])[:4]) for k in ("date_min", "date_max") if f.get(k)}
+    return [p for p in papers if years and not p.published and p.year in years]
+
+
 def exclusion_reason(p: Paper, f: dict, require_any=None, exclude_any=None, year_now: int | None = None,
-                     blocked: set | None = None) -> str | None:
-    """Return why `p` fails the filters, or None if it passes."""
+                     blocked: set | None = None, hits: int | None = None) -> str | None:
+    """Return why `p` fails the filters, or None if it passes. `hits`: for a snowballed paper, the number of papers
+    linking to it that themselves pass the filters (default: all of them)."""
     blocked = block_keys(f.get("block")) if blocked is None else blocked
     if blocked and blocked.intersection(p.dedup_keys()):
         return "blocked"  # before the protection below: a blocked paper never enters, even as a seed
@@ -61,6 +90,9 @@ def exclusion_reason(p: Paper, f: dict, require_any=None, exclude_any=None, year
         return f"published before {f['year_min']}"
     if f.get("year_max") and p.year and p.year > int(f["year_max"]):
         return f"published after {f['year_max']}"
+    why = _date_reason(p, f)
+    if why:
+        return why
     langs = [str(x).lower() for x in f.get("languages") or []]
     if langs and p.language and p.language.lower() not in langs:
         return f"language: {p.language}"
@@ -85,8 +117,10 @@ def exclusion_reason(p: Paper, f: dict, require_any=None, exclude_any=None, year
     req = require_any if require_any is not None else compile_terms(f.get("require_any"))
     if req and not any(rx.search(text) for _, rx in req):
         return "none of the required keywords"
+    if p.round > 0 and hits == 0 and p.hits > 0:
+        return "linked only from papers removed by the filters"
     min_hits = int(f.get("min_hits") or 0)
-    if min_hits and p.round > 0 and p.hits < min_hits:
+    if min_hits and p.round > 0 and (p.hits if hits is None else hits) < min_hits:
         return f"linked from fewer than {min_hits} papers"
     snow_req = compile_terms(f.get("snowball_require_any")) if p.round > 0 else []
     if snow_req and not any(rx.search(text) for _, rx in snow_req):
@@ -100,9 +134,17 @@ def apply(papers: list[Paper], f: dict) -> dict[str, int]:
     year_now = this_year()
     blocked = block_keys(f.get("block"))
     counts: dict[str, int] = {}
-    for p in papers:
-        p.excluded_reason = exclusion_reason(p, f, req, exc, year_now, blocked)
+    removed: set[str] = set()  # ids of papers the filters remove; their snowballing links no longer count
+    for p in sorted(papers, key=lambda q: q.round):  # earlier rounds first: they are the later rounds' sources
+        hits = None
+        if p.round > 0:
+            sources = {v.split(":", 1)[1] for v in p.found_via if v.startswith(("backward:", "forward:"))}
+            hits = len(sources - removed)
+        p.excluded_reason = exclusion_reason(p, f, req, exc, year_now, blocked, hits)
         if p.excluded_reason:
-            key = re.sub(r":.*$", "", p.excluded_reason) if p.excluded_reason.startswith(("language", "publication type", "venue")) else p.excluded_reason
+            # every id form, since a link may name the paper by an id it had before a merge (arxiv: -> doi:)
+            removed.update(k for k in (p.id, p.doi and "doi:" + p.doi, p.arxiv_id and "arxiv:" + p.arxiv_id.lower(),
+                                       p.openalex_id and "openalex:" + p.openalex_id, p.s2_id and "s2:" + p.s2_id) if k)
+            key =re.sub(r":.*$", "", p.excluded_reason) if p.excluded_reason.startswith(("language", "publication type", "venue")) else p.excluded_reason
             counts[key] = counts.get(key, 0) + 1
     return counts

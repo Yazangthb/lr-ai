@@ -13,8 +13,8 @@ from .sources import openalex
 from .sources import semantic_scholar as s2
 from .util import info
 
-_FILL = ("abstract", "citation_count", "doi", "arxiv_id", "s2_id", "openalex_id", "venue", "year", "pdf_url",
-         "language")
+_FILL = ("abstract", "citation_count", "doi", "arxiv_id", "s2_id", "openalex_id", "venue", "year", "published",
+         "pdf_url", "language")
 
 
 def _fill(p: Paper, q: Paper | None) -> bool:
@@ -40,6 +40,30 @@ def _checked(p: Paper, source: str) -> bool:
 
 def _mark(p: Paper, source: str) -> None:
     p.extra["meta_checked"] = sorted(set(p.extra.get("meta_checked") or []) | {source})
+
+
+def complete_dates(papers: list[Paper], years: set[int] | None = None) -> int:
+    """Fill the publication date (OpenAlex) of papers that have none, optionally only those published in `years`
+    (the cut-off years of a date filter: only there does the exact date decide). Returns how many gained a date."""
+    targets = [p for p in papers if not p.published and (years is None or p.year in years)]
+    if not targets:
+        return 0
+    info(f"  looking up publication dates for {len(targets)} papers")
+    filled = 0
+    try:
+        by_id = {p.openalex_id: p for p in targets if p.openalex_id}
+        for q in openalex.get_works(list(by_id)):
+            p = by_id.get(q.openalex_id or "")
+            if p is not None and q.published:
+                p.published, filled = q.published, filled + 1
+        by_doi = {openalex.doi_of(p): p for p in targets if not p.published and openalex.doi_of(p)}
+        for q in openalex.lookup_dois(list(by_doi)) if by_doi else []:
+            p = by_doi.get(openalex.doi_of(q) or "")
+            if p is not None and q.published and not p.published:
+                p.published, filled = q.published, filled + 1
+    except HttpError as e:
+        info(f"  OpenAlex date lookup stopped: {e}")
+    return filled
 
 
 def complete_metadata(papers: list[Paper], force: bool = False) -> int:

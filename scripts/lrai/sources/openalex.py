@@ -11,7 +11,7 @@ from ..models import Paper, norm_arxiv
 
 BASE = "https://api.openalex.org"
 SELECT = (
-    "id,doi,title,display_name,publication_year,primary_location,authorships,cited_by_count,"
+    "id,doi,title,display_name,publication_year,publication_date,primary_location,authorships,cited_by_count,"
     "abstract_inverted_index,language,type,open_access,best_oa_location,locations"
 )
 MIN_INTERVAL = 0.15
@@ -59,6 +59,7 @@ def to_paper(w: dict | None) -> Paper | None:
         title=title,
         authors=[(a.get("author") or {}).get("display_name") for a in w.get("authorships") or []],
         year=w.get("publication_year"),
+        published=w.get("publication_date"),
         venue=source.get("display_name"),
         doi=w.get("doi"),
         arxiv_id=_arxiv_from_locations(w),

@@ -16,6 +16,7 @@ PRIORITIES = ("high", "medium", "low")
 
 _DOI_PREFIX = re.compile(r"^\s*(?:(?:https?://)?(?:dx\.)?doi\.org/|doi:\s*)", re.I)
 _ARXIV_DOI = re.compile(r"^10\.48550/arxiv\.(.+)$", re.I)
+_DATE = re.compile(r"^\d{4}-\d{2}(?:-\d{2})?")
 _ARXIV_URL = re.compile(r"arxiv\.org/(?:abs|pdf|html)/(.+?)(?:\.pdf)?/?(?:[?#].*)?$", re.I)
 _ARXIV_VERSION = re.compile(r"v\d+$", re.I)
 _ARXIV_ID = re.compile(r"^(?:\d{4}\.\d{4,5}|[a-z-]+(?:\.[a-z]{2})?/\d{7})$", re.I)
@@ -62,6 +63,7 @@ class Paper:
     title: str = ""
     authors: list = field(default_factory=list)
     year: int | None = None
+    published: str | None = None  # publication date as YYYY-MM-DD (or YYYY-MM) when the source gives one
     venue: str | None = None
     doi: str | None = None
     arxiv_id: str | None = None
@@ -106,6 +108,9 @@ class Paper:
             self.openalex_id = str(self.openalex_id).rstrip("/").rsplit("/", 1)[-1].upper()
         if isinstance(self.year, str):
             self.year = int(self.year) if self.year.isdigit() else None
+        if self.published:
+            m = _DATE.match(str(self.published))
+            self.published = m.group(0) if m else None
         if self.abstract:
             self.abstract = " ".join(_MARKUP.sub("", html.unescape(clean_text(str(self.abstract)))).split()) or None
         self.authors = [clean_text(str(a)) for a in (self.authors or []) if a]

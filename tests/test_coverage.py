@@ -136,3 +136,14 @@ def test_reworded_titles_match_only_close_variants_and_are_reported():
     assert {m["run_id"] for m in r["fuzzy_matches"]} == {"doi:10.1/epic", "doi:10.3390/ani11041008"}
     assert [m["title"] for m in r["missed"]] == ["Framework for a Digital Twin of the Canal of Calais"]
     assert r["extras_count"] == 1  # only the network-twin paper; the two matched papers are not "never screened"
+
+
+def test_coverage_counts_included_papers_newer_than_the_review():
+    g = paper("Gold record on fault prediction models", doi="10.9/g", year=2021)
+    g.extra["label"] = 1
+    run = [paper(f"A newer paper number {i} on fault prediction", doi=f"10.8/{i}", year=2024) for i in range(3)]
+    run.append(paper("Gold record on fault prediction models", doi="10.9/g", year=2021))
+    for p in run:
+        p.status = "core"
+    r = evaluate.coverage(run, [g])
+    assert r["newest_included_year"] == 2021 and r["run_included_after_newest"] == 3

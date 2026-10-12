@@ -12,7 +12,7 @@ import re
 from .models import Paper, norm_title
 
 _FILL_FIELDS = (
-    "title", "year", "venue", "doi", "arxiv_id", "openalex_id", "s2_id", "url", "pdf_url",
+    "title", "year", "published", "venue", "doi", "arxiv_id", "openalex_id", "s2_id", "url", "pdf_url",
     "language", "type", "excluded_reason", "status", "status_reason", "relevance", "short_summary",
     "summary", "rq_relation", "first_level", "second_level", "priority", "code",
 )

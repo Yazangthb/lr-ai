@@ -13,7 +13,7 @@ from ..models import Paper
 
 BASE = "https://api.semanticscholar.org/graph/v1"
 FIELDS = (
-    "paperId,externalIds,title,abstract,year,venue,publicationVenue,journal,authors,"
+    "paperId,externalIds,title,abstract,year,publicationDate,venue,publicationVenue,journal,authors,"
     "citationCount,url,openAccessPdf,publicationTypes"
 )
 
@@ -40,6 +40,7 @@ def to_paper(d: dict | None) -> Paper | None:
         title=d["title"],
         authors=[a.get("name") for a in d.get("authors") or [] if a.get("name")],
         year=d.get("year"),
+        published=d.get("publicationDate"),
         venue=venue or None,
         doi=ext.get("DOI"),
         arxiv_id=ext.get("ArXiv"),

@@ -73,3 +73,31 @@ def test_leading_wildcard_matches_inside_words():
     for text in ("A Cybertwins architecture", "a cyber-physical twin approach", "Tiny Twins for attacks"):
         assert rx.search(text)
     assert not rx.search("twain") and not filters._term_regex("digital twin*").search("Cybertwin testbed")
+
+
+def test_date_cutoff_uses_the_date_when_known_and_the_year_otherwise():
+    f = cfg(date_max="2024-01-31")
+    jan = paper("Published in January", published="2024-01-15", year=2024)
+    month_only = paper("Only the month is known", published="2024-01", year=2024)
+    feb = paper("Published in February", published="2024-02-02", year=2024)
+    undated = paper("Cut-off year, no date", year=2024)
+    later = paper("A later year, no date", year=2025)
+    filters.apply([jan, month_only, feb, undated, later], f)
+    assert [p.excluded_reason for p in (jan, month_only, undated)] == [None, None, None]
+    assert feb.excluded_reason == later.excluded_reason == "published after 2024-01-31"
+    assert filters.undated_in_cutoff_years([jan, undated, later], f) == [undated]
+
+
+def test_snowballed_papers_count_only_links_from_papers_that_pass():
+    old = paper("A 2023 start paper on twins", doi="10.1/old", year=2023)
+    new = paper("A 2024 start paper on twins", arxiv_id="2401.00001", year=2024)
+    new.doi = "10.1/new"  # merged with its journal version after snowballing: the link still names the arXiv id
+    only_new = paper("Referenced only by the 2024 paper", doi="10.1/a", round=1, found_via=["backward:arxiv:2401.00001"])
+    both = paper("Referenced by both start papers", doi="10.1/b", round=1,
+                 found_via=["backward:arxiv:2401.00001", "backward:doi:10.1/old"])
+    filters.apply([only_new, both, old, new], cfg(year_max=2023, min_hits=1))
+    assert new.excluded_reason == "published after 2023"
+    assert only_new.excluded_reason == "linked only from papers removed by the filters"
+    assert both.excluded_reason is None
+    filters.apply([only_new, both, old, new], cfg(year_max=2023, min_hits=2))
+    assert both.excluded_reason == "linked from fewer than 2 papers"

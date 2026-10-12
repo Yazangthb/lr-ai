@@ -244,6 +244,10 @@ def coverage(papers: list[Paper], gold: list[Paper], at: list[int] | None = None
     positives = [r for r in rows if r["label"] == 1]
     fuzzy = _fuzzy_fill(papers, [r for r in positives if r["run"] is None], rank_of, taken)
     extras = [i for i in extras if i not in taken]  # a reworded match is not a paper the review never saw
+    # a date cut-off check: LR-AI papers newer than anything the review included were probably out of its reach
+    years = [r["gold"].year for r in positives if r["gold"].year]
+    newest = max(years) if years else None
+    after = sum(1 for p in papers if p.included and p.year and newest and p.year > newest)
     total = len(positives)
     in_run = [r for r in positives if r["run"] is not None]
     kept = [r for r in in_run if papers[r["run"]].included]
@@ -278,6 +282,8 @@ def coverage(papers: list[Paper], gold: list[Paper], at: list[int] | None = None
         "overlap_with_review_screened": _ratio(sum(1 for r in rows if r["run"] is not None), len(rows)),
         "found_by_stage": dict(stage),
         "fuzzy_matches": fuzzy,
+        "newest_included_year": newest,
+        "run_included_after_newest": after,
         "missed": missed,
         "extras_count": len(extras),
         "extras": [{"id": papers[i].id, "title": papers[i].title, "status": papers[i].status,

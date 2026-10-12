@@ -35,6 +35,7 @@ def parse_feed(xml_text: str) -> list[Paper]:
             title=title,
             authors=[a.findtext("a:name", default="", namespaces=NS) for a in e.findall("a:author", NS)],
             year=int(published[:4]) if published[:4].isdigit() else None,
+            published=published[:10] or None,
             venue=journal_ref or "arXiv",
             doi=e.findtext("arxiv:doi", default=None, namespaces=NS),
             arxiv_id=aid,

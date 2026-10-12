@@ -8,7 +8,7 @@ import sys
 
 from . import __version__, filters, report, screening
 from . import config as cfgmod
-from .complete import complete_metadata
+from .complete import complete_dates, complete_metadata
 from .config import render_template, taxonomy_names
 from .dedup import dedup, merge_into
 from .http import HttpError
@@ -319,6 +319,15 @@ def cmd_snowball(args) -> None:
 def cmd_complete(args) -> None:
     run = _run(args)
     papers = run.load()
+    if args.dates:
+        years = {int(str(run.config["filters"][k])[:4]) for k in ("date_min", "date_max")
+                 if run.config["filters"].get(k)}
+        filled = complete_dates(papers, years or None)
+        run.save(papers)
+        run.log("complete", f"publication dates found for {filled} papers", years=sorted(years))
+        print(f"Found publication dates for {filled} papers"
+              + (f" published in {', '.join(map(str, sorted(years)))}." if years else "."))
+        return
     filled = complete_metadata(papers, force=args.all)
     run.save(papers)
     run.log("complete", f"metadata completed for {filled} papers")
@@ -339,6 +348,10 @@ def cmd_filter(args) -> None:
     print(f"Filters: {kept} of {len(papers)} papers pass.")
     for reason, n in sorted(counts.items(), key=lambda kv: -kv[1]):
         print(f"  excluded {n}: {reason}")
+    undated = [p for p in filters.undated_in_cutoff_years(papers, run.config["filters"]) if not p.excluded_reason]
+    if undated:
+        print(f"Note: {len(undated)} papers from the cut-off year have no publication date, so the date filter keeps "
+              "them. Run `lr.py complete --dates`, then `filter` again.")
     todo = len(screening.pending(papers, "screen"))
     print(f"{todo} papers await screening.")
 
@@ -574,6 +587,10 @@ def cmd_coverage(args) -> None:
         for m in r["missed"][: args.show]:
             print(f"  {m['id']}\t{shorten(m['why'], 60)}\t{shorten(m['title'], 90)}")
     print(f"LR-AI included {r['extras_count']} papers the review never screened (check a sample for relevance).")
+    if r["run_included_after_newest"] and r["run_included_after_newest"] > 0.2 * max(r["run_included"], 1):
+        print(f"Warning: {r['run_included_after_newest']} of LR-AI's {r['run_included']} included papers are newer than "
+              f"the review's newest included study ({r['newest_included_year']}). Check the date cut-off "
+              "(filters.date_max = the review's search date).")
     out = args.out or run.file("coverage.json")
     with open(out, "w", encoding="utf-8") as f:
         json.dump(r, f, ensure_ascii=False, indent=1)
@@ -736,6 +753,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = cmd("complete", cmd_complete, "Fill missing abstracts/citation counts (Semantic Scholar, then OpenAlex).")
     p.add_argument("--all", action="store_true", help="also retry sources that already answered for a paper")
+    p.add_argument("--dates", action="store_true", help="look up missing publication dates (OpenAlex), only for "
+                   "papers from the cut-off years of filters.date_min / date_max when those are set")
 
     cmd("filter", cmd_filter, "Step 4a: apply the deterministic filters from config.yaml.")
 
