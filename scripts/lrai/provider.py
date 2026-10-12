@@ -35,33 +35,30 @@ def screener_prompt() -> str:
 
 
 def parse_results(text: str, wanted: list[str]) -> dict[str, dict]:
-    """JSON objects with a wanted id, from a reply that may wrap them in fences, a JSON array or prose."""
-    text = re.sub(r"```(?:jsonl?|json lines)?", "", text or "")
-    found: dict[str, dict] = {}
-    candidates = [line.strip().rstrip(",") for line in text.splitlines()]
-    try:  # a model that answers with one JSON array instead of JSONL
-        arr = json.loads(text.strip())
-        if isinstance(arr, list):
-            candidates = [json.dumps(x) for x in arr]
-    except ValueError:
-        pass
+    """JSON objects with a wanted id, wherever they are in the reply: one per line, in fences or a JSON array, or
+    written back to back on one line (gpt-oss-20b does this)."""
+    decoder = json.JSONDecoder()
+    text = text or ""
     ids = set(wanted)
-    for c in candidates:
-        if not c.startswith("{"):
-            continue
+    found: dict[str, dict] = {}
+    i = text.find("{")
+    while i != -1:
         try:
-            r = json.loads(c)
+            r, end = decoder.raw_decode(text, i)
         except ValueError:
+            i = text.find("{", i + 1)
             continue
         if isinstance(r, dict) and r.get("id") in ids and r["id"] not in found:
             found[r["id"]] = r
+        i = text.find("{", end)
     return found
 
 
 def _chat(base_url: str, key: str, model: str, system: str, user: str, timeout: float) -> tuple[str, dict]:
     body = {"model": model, "temperature": 0,
-            "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
-            "usage": {"include": True}}  # OpenRouter: report the cost; other servers ignore it
+            "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}
+    if "openrouter.ai" in base_url:
+        body["usage"] = {"include": True}  # report the cost; other servers may reject the field (Yandex's Qwen does)
     text = http.request(base_url.rstrip("/") + "/chat/completions", body=body, cache=False, timeout=timeout,
                         headers={"Authorization": f"Bearer {key}"}, min_interval=3.5, retries=6)
     try:

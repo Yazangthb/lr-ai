@@ -21,6 +21,17 @@ def test_parse_results_tolerates_fences_arrays_and_stray_text():
     assert list(provider.parse_results(fenced, wanted)) == ["doi:10.1/0"]
     arr = json.dumps([{"id": "doi:10.1/1", "status": "skim"}, {"id": "doi:10.1/0", "status": "exclude"}])
     assert provider.parse_results(arr, wanted)["doi:10.1/0"]["status"] == "exclude"
+    glued = '{"id":"doi:10.1/0","status":"core"}{"id":"doi:10.1/1","status":"exclude","reason":"a {brace}"}'
+    assert {k: v["status"] for k, v in provider.parse_results(glued, wanted).items()} == {
+        "doi:10.1/0": "core", "doi:10.1/1": "exclude"}
+
+
+def test_cost_field_is_sent_to_openrouter_only(monkeypatch):
+    bodies = []
+    monkeypatch.setattr(http, "request", lambda url, *a, body=None, **k: bodies.append(body) or _reply([]))
+    provider._chat("https://openrouter.ai/api/v1", "k", "m", "s", "u", 10)
+    provider._chat("https://llm.api.cloud.yandex.net/v1", "k", "m", "s", "u", 10)
+    assert "usage" in bodies[0] and "usage" not in bodies[1]
 
 
 def test_prompt_is_the_agent_prompt_without_frontmatter():
