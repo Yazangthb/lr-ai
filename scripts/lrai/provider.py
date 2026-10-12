@@ -18,6 +18,8 @@ from .run import ENGINE_ROOT
 PROVIDERS = {
     "openrouter": {"base_url": "https://openrouter.ai/api/v1", "key_env": "OPENROUTER_API_KEY"},
     "openai": {"base_url": "https://api.openai.com/v1", "key_env": "OPENAI_API_KEY"},
+    # Yandex Cloud AI Studio; model ids are URIs with the cloud folder, e.g. gpt://<folder>/gpt-oss-120b
+    "yandex": {"base_url": "https://llm.api.cloud.yandex.net/v1", "key_env": "YANDEX_API_KEY"},
 }
 USAGE_FILE = "usage.jsonl"  # one line per API call or per applied result file, in the stage folder
 _FRONTMATTER = re.compile(r"^---\n.*?\n---\n", re.S)

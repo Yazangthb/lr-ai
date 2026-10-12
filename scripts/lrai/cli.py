@@ -808,11 +808,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = cmd("screen", cmd_screen, "Screen the written screen batches through an OpenAI-compatible API (e.g. "
             "OpenRouter) with the paper-screener prompt, instead of Claude Code agents. Then run `apply`.")
-    p.add_argument("--provider", default="openrouter", help="openrouter | openai | any name with --base-url")
+    p.add_argument("--provider", default="openrouter", help="openrouter | openai | yandex | any name with --base-url")
     p.add_argument("--model", required=True, help="model id at the provider, e.g. google/gemma-4-31b-it:free")
     p.add_argument("--base-url", help="API base URL ending in /v1 (default: from --provider)")
     p.add_argument("--key-env", help="environment variable holding the API key (default: OPENROUTER_API_KEY, "
-                   "OPENAI_API_KEY or LLM_API_KEY)")
+                   "OPENAI_API_KEY, YANDEX_API_KEY or LLM_API_KEY)")
     p.add_argument("--batches", help="only these batches, e.g. batch_001,batch_002")
     p.add_argument("--timeout", type=float, default=300.0, help="seconds per API call")
 
