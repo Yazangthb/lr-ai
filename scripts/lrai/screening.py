@@ -16,6 +16,7 @@ import re
 
 from .config import taxonomy_names
 from .models import PRIORITIES, Paper, write_jsonl
+from .provider import result_file_usage, screener_prompt
 from .util import replace_file, shorten
 
 STAGES = ("screen", "enrich")
@@ -40,14 +41,14 @@ def _compact(p: Paper, stage: str) -> dict:
     return {k: v for k, v in d.items() if v not in (None, "")}
 
 
-def _batch_files(folder: str) -> list[str]:
+def batch_files(folder: str) -> list[str]:
     return sorted(f for f in glob.glob(os.path.join(glob.escape(folder), "batch_*.jsonl")) if not f.endswith(".result.jsonl"))
 
 
 def write_batches(run, stage: str, papers: list[Paper], size: int) -> list[str]:
     folder = run.file(stage)
     os.makedirs(folder, exist_ok=True)
-    numbers = [int(m.group(1)) for f in _batch_files(folder) if (m := re.search(r"batch_(\d+)\.jsonl$", f))]
+    numbers = [int(m.group(1)) for f in batch_files(folder) if (m := re.search(r"batch_(\d+)\.jsonl$", f))]
     start = max(numbers, default=0) + 1
     cfg = run.config
     base_meta = {
@@ -151,8 +152,9 @@ def apply_results(run, stage: str, papers: list[Paper], replay_all: bool = False
         with open(_state_path(run, stage), encoding="utf-8") as f:
             state = json.load(f)
     report = {"applied": 0, "files": 0, "unknown_ids": [], "problems": [], "missing": {}, "bad_lines": [],
-              "state": dict(state)}
-    for batch in _batch_files(folder):
+              "state": dict(state), "usage": []}
+    prompt_chars = len(screener_prompt())
+    for batch in batch_files(folder):
         result_path = batch[: -len(".jsonl")] + ".result.jsonl"
         with open(batch, encoding="utf-8-sig") as f:
             wanted = [json.loads(line)["id"] for line in f if line.strip() and '"_meta"' not in line[:12]]
@@ -164,6 +166,8 @@ def apply_results(run, stage: str, papers: list[Paper], replay_all: bool = False
             if state.get(name) != signature:
                 report["files"] += 1
                 report["state"][name] = signature
+                report["usage"].append({"batch": os.path.basename(batch), "papers": len(wanted),
+                                        **result_file_usage(batch, result_path, prompt_chars)})
                 with open(result_path, encoding="utf-8-sig") as f:  # tolerate a BOM (Notepad, PowerShell)
                     for n, line in enumerate(f, 1):
                         line = line.strip().rstrip(",")

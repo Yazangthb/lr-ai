@@ -373,6 +373,44 @@ def cmd_batches(args) -> None:
         print("  " + p)
 
 
+def _usage_summary(rows: list[dict]) -> dict | None:
+    """Totals of the result files applied now: estimated tokens and wall-clock time (batches run in parallel, so
+    the time is from the earliest batch file to the latest result, not a sum)."""
+    if not rows:
+        return None
+    return {"batches": len(rows), "papers": sum(r["papers"] for r in rows),
+            "input_tokens_est": sum(r["input_tokens_est"] for r in rows),
+            "output_tokens_est": sum(r["output_tokens_est"] for r in rows),
+            "wall_minutes": round((max(r["result_written"] for r in rows)
+                                   - min(r["batch_written"] for r in rows)) / 60, 1),
+            "source": "estimate (file sizes / 4; agent overhead not included)"}
+
+
+def cmd_screen(args) -> None:
+    from . import provider
+    run = _run(args)
+    batches = screening.batch_files(run.file("screen"))
+    if args.batches:
+        wanted = set(args.batches.split(","))
+        batches = [b for b in batches if os.path.basename(b)[: -len(".jsonl")] in wanted]
+    todo = [b for b in batches if not os.path.exists(b[: -len(".jsonl")] + ".result.jsonl")]
+    if not todo:
+        print("No screen batch without a result file. Write batches first: lr.py batches --stage screen")
+        return
+    print(f"Screening {len(todo)} batches with {args.provider}:{args.model} ...")
+    t = provider.screen_batches(run, todo, args.provider, args.model, base_url=args.base_url,
+                                key_env=args.key_env, timeout=args.timeout)
+    name = f"{args.provider}/{args.model}"
+    summary = (f"{t['screened']} of {t['papers']} papers screened by {name} in {t['batches']} batches; "
+               f"{t['prompt_tokens']:,} input + {t['completion_tokens']:,} output tokens, "
+               f"${t['cost']:.4f}, {t['seconds'] / 60:.1f} min")
+    run.log("screen", summary, provider=args.provider, model=args.model, base_url=args.base_url, **t)
+    print(summary)
+    if t["failed"]:
+        print("Batches without results (re-run the command to retry): " + ", ".join(t["failed"]))
+    print(f"Next: lr.py apply --stage screen --model {name}")
+
+
 def cmd_apply(args) -> None:
     run = _run(args)
     papers = run.load()
@@ -386,9 +424,14 @@ def cmd_apply(args) -> None:
     else:
         done = sum(1 for p in live if p.included and p.summary)
         summary = f"enrichment applied: {done} of {sum(1 for p in live if p.included)} included papers summarized"
+    usage = _usage_summary(rep["usage"])
     run.log(f"apply {args.stage}", summary, applied=rep["applied"], missing=rep["missing"],
-            problems=rep["problems"][:50], model=(args.model or "unknown") if rep["applied"] else None)
+            problems=rep["problems"][:50], model=(args.model or "unknown") if rep["applied"] else None, usage=usage)
     print(summary + f" ({rep['applied']} new results from {rep['files']} new or changed result files).")
+    if usage:
+        print(f"Usage (estimated from file sizes): ~{usage['input_tokens_est']:,} input and "
+              f"~{usage['output_tokens_est']:,} output tokens over {usage['batches']} batches; "
+              f"{usage['wall_minutes']} min from the first batch file to the last result.")
     if rep["applied"] and not args.model:
         print("Note: no --model given, so these results are recorded as model 'unknown'. "
               "Pass e.g. --model claude-haiku-5-5 to keep the run reproducible.")
@@ -762,6 +805,16 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--stage", choices=screening.STAGES, required=True)
     p.add_argument("--size", type=int, help="papers per batch (default: screening.batch_size)")
     p.add_argument("--force", action="store_true", help="include papers that already have results")
+
+    p = cmd("screen", cmd_screen, "Screen the written screen batches through an OpenAI-compatible API (e.g. "
+            "OpenRouter) with the paper-screener prompt, instead of Claude Code agents. Then run `apply`.")
+    p.add_argument("--provider", default="openrouter", help="openrouter | openai | any name with --base-url")
+    p.add_argument("--model", required=True, help="model id at the provider, e.g. google/gemma-4-31b-it:free")
+    p.add_argument("--base-url", help="API base URL ending in /v1 (default: from --provider)")
+    p.add_argument("--key-env", help="environment variable holding the API key (default: OPENROUTER_API_KEY, "
+                   "OPENAI_API_KEY or LLM_API_KEY)")
+    p.add_argument("--batches", help="only these batches, e.g. batch_001,batch_002")
+    p.add_argument("--timeout", type=float, default=300.0, help="seconds per API call")
 
     p = cmd("apply", cmd_apply, "Merge new subagent result files into papers.jsonl (manual `set` edits win).")
     p.add_argument("--stage", choices=screening.STAGES, required=True)

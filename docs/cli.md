@@ -13,7 +13,8 @@ under `./lr-runs`. Progress goes to stderr; a short summary goes to stdout.
 | `snowball [--round N] [--from all\|included] [--direction ...] [--force]` | 3 | One round of backward + forward snowballing |
 | `filter` | 4a | Applies the deterministic `filters` from config (recomputed every time) |
 | `batches --stage screen\|enrich [--size N] [--force]` | 4b / 5 | Writes self-describing batch files for `paper-screener` subagents |
-| `apply --stage screen\|enrich [--all]` | 4b / 5 | Merges new or changed `*.result.jsonl` files into `papers.jsonl`, reports missing results. Manual `set` edits always win |
+| `screen --model ID [--provider openrouter\|openai] [--base-url URL] [--key-env VAR] [--batches ...]` | 4b | Alternative to Claude Code agents: screens the written batches through an OpenAI-compatible API with the same `paper-screener` prompt. The key comes from an environment variable (default `OPENROUTER_API_KEY`) and is never stored. Logs tokens, cost and time per call in `screen/usage.jsonl` |
+| `apply --stage screen\|enrich [--all] [--model ID]` | 4b / 5 | Merges new or changed `*.result.jsonl` files into `papers.jsonl`, reports missing results, records the model per paper and logs estimated tokens and wall-clock time. Manual `set` edits always win |
 | `export [--out file.xlsx]` | 6 | Writes the styled workbook (Papers, Overview, Method tabs) |
 | `sheet-plan --spreadsheet-id ID [--sheet-id 0] [--account ACC]` | 6 | Writes the Composio calls that build the Google Sheet (`--account` defaults to `LR_AI_GOOGLE_ACCOUNT`) |
 | `status` | any | PRISMA-style counts and the suggested next step |
