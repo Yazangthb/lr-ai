@@ -35,7 +35,8 @@ decide the rest yourself:
 **Checkpoint:** ask the user for what the request left out instead of deciding it yourself.
 
 Then run `lr.py init "<topic>" --name <short-name>` (add `--profile wide` when the user wants maximum recall:
-looser snowballing filter, all references, more results, more screening) and fill `config.yaml` in the new run folder:
+looser snowballing filter, all references, more results, more screening; `--profile extra-wide` for an exhaustive
+search: also more citing papers and no snowball keyword rule, so many more papers to screen) and fill `config.yaml` in the new run folder:
 `research_questions`, `inclusion_criteria`, `exclusion_criteria`, `filters.year_min` / `year_max`.
 
 ## 3. Seed queries

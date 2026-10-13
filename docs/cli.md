@@ -6,7 +6,8 @@ under `./lr-runs`. Progress goes to stderr; a short summary goes to stdout.
 
 | Command | Step | What it does |
 |---|---|---|
-| `init "<topic>" [--name short] [--root lr-runs]` | setup | Creates `lr-runs/<name>-<date>/config.yaml` |
+| `init "<topic>" [--name short] [--root lr-runs] [--profile standard\|wide\|extra-wide]` | setup | Creates `lr-runs/<name>-<date>/config.yaml` |
+| `profile standard\|wide\|extra-wide` | setup | Switches the settings preset (table below); topic-specific settings are kept |
 | `doctor` | setup | Checks Python packages, API reachability and API keys |
 | `seed [--limit N]` | 1 | Runs `seed.queries` (Semantic Scholar → OpenAlex → arXiv fallback) and resolves `seed.papers` |
 | `search [--sources a,b] [--limit N]` | 2 | Runs boolean `search.queries` on OpenAlex, Semantic Scholar and arXiv |
@@ -22,6 +23,20 @@ under `./lr-runs`. Progress goes to stderr; a short summary goes to stdout.
 | `add <doi\|arXiv id\|title> ...` | any | Adds papers manually (never removed by filters) |
 | `set <paper id> key=value ...` | any | Manual override, e.g. `status=exclude status_reason="off topic"`. Never overwritten by `apply` |
 | `complete [--all]` | any | Fills missing abstracts / citation counts |
+
+## Settings profiles
+
+| Setting | `standard` | `wide` | `extra-wide` |
+|---|---|---|---|
+| `seed.per_query` | 20 | 30 | 30 |
+| `search.per_query` | 100 | 3000 | 3000 |
+| `snowball.from` | all | included | included |
+| `snowball.max_references` | 200 | all | all |
+| `snowball.max_citations` | 50 | 200 | 500 |
+| `filters.min_hits` | 0 | 1 | 1 |
+| `filters.snowball_keyword_rule` | on | on | off: every snowballed paper is screened |
+
+Wider profiles find more of the relevant papers but leave more papers to screen and a longer reading list.
 
 ## Run folder
 

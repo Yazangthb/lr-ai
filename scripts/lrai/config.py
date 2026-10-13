@@ -27,6 +27,7 @@ DEFAULTS: dict = {
         "exclude_types": ["erratum", "editorial", "retraction", "paratext", "letter", "peer-review",
                           "supplementary-materials"],
         "require_any": [], "exclude_any": [], "venue_exclude": [], "min_hits": 0, "snowball_require_any": [],
+        "snowball_keyword_rule": True,
         "block": [],
     },
     "screening": {"batch_size": 25},
@@ -83,6 +84,7 @@ filters:
   venue_exclude: []
   min_hits: 0          # snowballed papers must be linked from at least this many papers
   snowball_require_any: []  # like require_any, but only for papers found by snowballing alone
+  snowball_keyword_rule: true  # false = ignore snowball_require_any; the LLM screens every snowballed paper
   block: []            # papers that must never enter the review (DOI, arXiv id, OpenAlex id or exact title);
                        # e.g. the published review you are reproducing, so its reference list is not used
 
@@ -143,25 +145,36 @@ def taxonomy_names(cfg: dict) -> tuple[list[str], dict[str, list[str]]]:
 
 
 # Settings profiles: `standard` keeps result lists manageable; `wide` trades screening effort for recall (no
-# citation-count threshold for snowballed papers, all references, more citing papers and search results).
-# Topic-specific filters (years, keywords, block list) are never touched by a profile.
+# citation-count threshold for snowballed papers, all references, more citing papers and search results);
+# `extra-wide` goes further: up to 500 citing papers per paper, and the snowball keyword rule switched off so the LLM
+# screens every snowballed paper (cheap with a small model; the reading list grows).
+# Topic-specific filters (years, keywords, block list) are never changed by a profile: `extra-wide` only switches the
+# keyword rule off (snowball_keyword_rule), and the keyword list stays in config.yaml for the other profiles.
 PROFILES: dict[str, dict[str, dict]] = {
     "standard": {
         "seed": {"per_query": 20},
         "search": {"per_query": 100},
         "snowball": {"from": "all", "max_references": 200, "max_citations": 50},
-        "filters": {"min_hits": 0},
+        "filters": {"min_hits": 0, "snowball_keyword_rule": True},
     },
     "wide": {
         "seed": {"per_query": 30},
         "search": {"per_query": 3000},  # in effect: all matches for most topic queries
         "snowball": {"from": "included", "max_references": None, "max_citations": 200},
-        "filters": {"min_hits": 1},
+        "filters": {"min_hits": 1, "snowball_keyword_rule": True},
+    },
+    "extra-wide": {
+        "seed": {"per_query": 30},
+        "search": {"per_query": 3000},
+        "snowball": {"from": "included", "max_references": None, "max_citations": 500},
+        "filters": {"min_hits": 1, "snowball_keyword_rule": False},
     },
 }
 
 
 def _yaml_scalar(value) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
     return "null" if value is None else (json.dumps(value) if isinstance(value, str) else str(value))
 
 

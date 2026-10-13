@@ -20,6 +20,30 @@ def test_wide_profile_changes_only_its_keys_and_keeps_comments():
     assert back["profile"] == "standard"
 
 
+def test_extra_wide_switches_the_keyword_rule_off_and_keeps_the_keywords():
+    import yaml
+    text = render_template("digital twins", "2026-10-13").replace(
+        "  snowball_require_any: []", '  snowball_require_any: ["*twin*"]')
+    extra = yaml.safe_load(cfgmod.apply_profile(text, "extra-wide"))
+    assert extra["profile"] == "extra-wide" and extra["snowball"]["max_citations"] == 500
+    assert extra["search"]["per_query"] == 3000 and extra["filters"]["min_hits"] == 1
+    assert extra["filters"]["snowball_keyword_rule"] is False
+    assert extra["filters"]["snowball_require_any"] == ["*twin*"]  # the list stays for the other profiles
+    back = yaml.safe_load(cfgmod.apply_profile(cfgmod.apply_profile(text, "extra-wide"), "wide"))
+    assert back["filters"]["snowball_keyword_rule"] is True and back["snowball"]["max_citations"] == 200
+
+
+def test_snowball_keyword_rule_off_keeps_snowballed_papers_without_the_keywords():
+    from conftest import paper
+    from lrai import filters
+    snowballed = paper("A survey of anomaly detection methods", found_via=["backward:doi:10.1/x"], round=1)
+    f = {"snowball_require_any": ["*twin*"]}
+    filters.apply([snowballed], f)
+    assert snowballed.excluded_reason == "snowballed, none of the required keywords"
+    filters.apply([snowballed], {**f, "snowball_keyword_rule": False})
+    assert snowballed.excluded_reason is None
+
+
 def test_set_values_appends_missing_keys_and_sections():
     text = "topic: x\nfilters:\n  year_min: 2020\nscreening:\n  batch_size: 25\n"
     out = cfgmod.set_values(text, "filters", {"min_hits": 1})

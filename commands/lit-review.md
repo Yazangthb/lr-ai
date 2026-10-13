@@ -39,6 +39,10 @@ Rules:
   `lr.py init ... --profile wide` (or `lr.py profile wide --run <dir>` later, then `filter`). It keeps snowballed
   papers linked from a single paper, takes all references and more citing papers and search results, so screening
   takes noticeably more subagents. Say so, and give the expected number of papers to screen after `filter`.
+  For the most exhaustive search, use `--profile extra-wide`: like wide, plus up to 500 citing papers per paper and no
+  snowball keyword rule (`filters.snowball_keyword_rule: false`), so every snowballed paper is screened. That can mean
+  several times more papers to screen and a longer reading list; give the number after `filter` and ask before
+  screening.
 - Settings in the request override the defaults. Write each one to `config.yaml` before the step that uses it:
   year range (`filters.year_min` / `year_max`), papers per query (`seed.per_query`, `search.per_query`),
   databases (`search.sources`), snowball rounds, direction and limits (`snowball.direction`,

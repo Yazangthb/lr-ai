@@ -762,8 +762,9 @@ def build_parser() -> argparse.ArgumentParser:
         p.set_defaults(func=fn)
         return p
 
-    p = cmd("profile", cmd_profile, "Switch a run's settings preset: standard, or wide (maximum recall: snowballed "
-            "papers kept even if linked from one paper, all references, more results). Keeps your other settings.")
+    p = cmd("profile", cmd_profile, "Switch a run's settings preset: standard; wide (high recall: snowballed papers "
+            "kept even if linked from one paper, all references, more results); or extra-wide (wide plus up to 500 "
+            "citing papers per paper and no snowball keyword rule, so more papers to screen). Keeps your other settings.")
     p.add_argument("name", choices=sorted(cfgmod.PROFILES))
     p = cmd("init", cmd_init, "Create a run folder with a config.yaml template.", run=False)
     p.add_argument("topic")
