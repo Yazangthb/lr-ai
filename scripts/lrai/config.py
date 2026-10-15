@@ -30,7 +30,7 @@ DEFAULTS: dict = {
         "snowball_keyword_rule": True,
         "block": [],
     },
-    "screening": {"batch_size": 25},
+    "screening": {"batch_size": 25, "max_list": 300},
     "taxonomy": [],
     "export": {"title": None, "columns": None},
 }
@@ -90,6 +90,8 @@ filters:
 
 screening:
   batch_size: 25       # papers per screening subagent
+  max_list: 300        # final reading list: at most this many papers, core first, then by relevance
+                       # (applied by `lr.py finalize`; null = no limit; papers below the cut are kept, marked)
 
 taxonomy: []           # two-level categories, filled in after screening
 #  - name: "Graph-based forecasting"

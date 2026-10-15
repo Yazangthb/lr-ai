@@ -175,8 +175,14 @@ class Paper:
         return kinds
 
     @property
-    def included(self) -> bool:
+    def screened_in(self) -> bool:
+        """Passed the filters and screened core or skim (before any reading-list limit)."""
         return self.excluded_reason is None and self.status in ("core", "skim")
+
+    @property
+    def included(self) -> bool:
+        """In the final reading list: screened in and not cut by the list limit (`lr.py finalize`)."""
+        return self.screened_in and not self.extra.get("beyond_list_limit")
 
     def to_dict(self) -> dict:
         d = {"id": self.id}

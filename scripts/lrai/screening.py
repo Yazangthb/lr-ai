@@ -204,3 +204,34 @@ def save_state(run, stage: str, state: dict) -> None:
 
 def _still_pending(p: Paper, stage: str) -> bool:
     return p.status is None if stage == "screen" else (p.included and not p.summary)
+
+
+_LIST_ORDER = {"core": 0, "skim": 1}
+
+
+def list_order(p: Paper) -> tuple:
+    """Reading order of screened-in papers: core before skim, then by relevance (highest first), then id."""
+    return (_LIST_ORDER[p.status], -(p.relevance if p.relevance is not None else 0.0), p.id)
+
+
+def limit_list(papers: list[Paper], max_papers: int | None) -> dict:
+    """Cut the reading list to the first `max_papers` screened-in papers in reading order. Papers below the cut keep
+    their screening decision and are marked extra["beyond_list_limit"]; every screened-in paper gets its position in
+    extra["list_rank"]. `max_papers` None or 0 removes the limit."""
+    ranked = sorted((p for p in papers if p.screened_in), key=list_order)
+    for p in papers:
+        p.extra.pop("beyond_list_limit", None)
+        if not p.screened_in:
+            p.extra.pop("list_rank", None)
+    for i, p in enumerate(ranked, 1):
+        p.extra["list_rank"] = i
+        if max_papers and i > max_papers:
+            p.extra["beyond_list_limit"] = True
+    kept = ranked[:max_papers] if max_papers else ranked
+    return {"screened_in": len(ranked), "list": len(kept), "core": sum(p.status == "core" for p in kept),
+            "skim": sum(p.status == "skim" for p in kept), "beyond_limit": len(ranked) - len(kept),
+            "max_list": max_papers or None}
+
+
+def is_finalized(papers: list[Paper]) -> bool:
+    return any("list_rank" in p.extra for p in papers)

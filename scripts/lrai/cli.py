@@ -284,8 +284,8 @@ def cmd_snowball(args) -> None:
         if p.round != round_no - 1 or p.excluded_reason or blocked.intersection(p.dedup_keys()):
             return False
         if source == "core":
-            return p.included and p.status == "core"
-        return p.included if source == "included" else p.status != "exclude"
+            return p.screened_in and p.status == "core"
+        return p.screened_in if source == "included" else p.status != "exclude"
 
     frontier = [p for p in papers if eligible(p)]
     if not frontier:
@@ -340,6 +340,7 @@ def cmd_filter(args) -> None:
     papers = dedup(before)  # cheap and idempotent; catches duplicates left by older runs
     counts = filters.apply(papers, run.config["filters"])
     kept = sum(1 for p in papers if not p.excluded_reason)
+    _relimit(run, papers)
     run.save(papers)
     run.log("filter", f"{kept} of {len(papers)} papers pass the filters", excluded=counts,
             merged_duplicates=len(before) - len(papers))
@@ -411,10 +412,38 @@ def cmd_screen(args) -> None:
     print(f"Next: lr.py apply --stage screen --model {name}")
 
 
+def _max_list(run) -> int | None:
+    value = run.config["screening"].get("max_list")
+    return int(value) if value else None
+
+
+def _relimit(run, papers) -> None:
+    """Keep the reading-list cut current after filters or new screening results change the screened-in set."""
+    if screening.is_finalized(papers):
+        screening.limit_list(papers, _max_list(run))
+
+
+def cmd_finalize(args) -> None:
+    run = _run(args)
+    papers = run.load()
+    limit = (args.max or None) if args.max is not None else _max_list(run)
+    r = screening.limit_list(papers, limit)
+    run.save(papers)
+    summary = (f"reading list: {r['list']} of {r['screened_in']} screened-in papers ({r['core']} core, {r['skim']} skim)"
+               + (f"; {r['beyond_limit']} beyond the {limit}-paper limit" if r["beyond_limit"] else "")
+               + ("" if limit else "; no limit"))
+    run.log("finalize", summary, **r)
+    print(summary.capitalize() + ".")
+    if r["beyond_limit"]:
+        print("Papers below the cut keep their screening decision (extra.beyond_list_limit); "
+              "run `finalize --max 0` to remove the limit.")
+
+
 def cmd_apply(args) -> None:
     run = _run(args)
     papers = run.load()
     rep = screening.apply_results(run, args.stage, papers, replay_all=args.all, model=args.model)
+    _relimit(run, papers)
     run.save(papers)
     screening.save_state(run, args.stage, rep["state"])
     live = [p for p in papers if not p.excluded_reason]
@@ -822,6 +851,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--all", action="store_true", help="re-apply result files that were already applied")
     p.add_argument("--model", help="model that produced these results, recorded per paper and in the log "
                    "(e.g. claude-haiku-5-5)")
+
+    p = cmd("finalize", cmd_finalize, "Last step: cut the reading list to the best N screened-in papers (core first, "
+            "then by relevance). Papers below the cut keep their decision and are marked, not deleted.")
+    p.add_argument("--max", type=int, help="list size (default: screening.max_list, 300); 0 = no limit")
 
     p = cmd("show", cmd_show, "List papers (filter with --where key=value).")
     p.add_argument("--where", action="append", help="e.g. status=core, included=true, found=forward, round=1")

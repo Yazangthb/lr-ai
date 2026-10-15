@@ -16,6 +16,7 @@ under `./lr-runs`. Progress goes to stderr; a short summary goes to stdout.
 | `batches --stage screen\|enrich [--size N] [--force]` | 4b / 5 | Writes self-describing batch files for `paper-screener` subagents |
 | `screen --model ID [--provider openrouter\|openai\|yandex] [--base-url URL] [--key-env VAR] [--batches ...]` | 4b | Alternative to Claude Code agents: screens the written batches through an OpenAI-compatible API with the same `paper-screener` prompt. The key comes from an environment variable (default `OPENROUTER_API_KEY`) and is never stored. Logs tokens, cost and time per call in `screen/usage.jsonl` |
 | `apply --stage screen\|enrich [--all] [--model ID]` | 4b / 5 | Merges new or changed `*.result.jsonl` files into `papers.jsonl`, reports missing results, records the model per paper and logs estimated tokens and wall-clock time. Manual `set` edits always win |
+| `finalize [--max N]` | 4c | Last step: cuts the reading list to the best N screened-in papers (core first, then by relevance; default `screening.max_list`, 300). Papers below the cut keep their decision and are marked. `filter` and `apply` keep the cut current |
 | `export [--out file.xlsx]` | 6 | Writes the styled workbook (Papers, Overview, Method tabs) |
 | `sheet-plan --spreadsheet-id ID [--sheet-id 0] [--account ACC]` | 6 | Writes the Composio calls that build the Google Sheet (`--account` defaults to `LR_AI_GOOGLE_ACCOUNT`) |
 | `status` | any | PRISMA-style counts and the suggested next step |

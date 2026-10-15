@@ -268,16 +268,17 @@ def coverage(papers: list[Paper], gold: list[Paper], at: list[int] | None = None
             "run_id": p.id if p else None, "rank": r["rank"],
             "found_by_search": bool(kinds - {"backward", "forward"}), "found_by_snowballing": bool(kinds & {"backward", "forward"}),
             "excluded_reason": p.excluded_reason if p else None, "status": p.status if p else None,
-            "status_reason": p.status_reason if p else None, "included": bool(p and p.included)})
+            "status_reason": p.status_reason if p else None, "included": bool(p and p.included),
+            "beyond_list_limit": bool(p and p.extra.get("beyond_list_limit"))})
     missed = []
     for r in positives:
         if r["run"] is None:
             missed.append({"title": r["gold"].title, "id": r["gold"].id, "why": "never found"})
         elif not papers[r["run"]].included:
             p = papers[r["run"]]
-            missed.append({"title": p.title, "id": p.id,
-                           "why": p.excluded_reason or ("screened out: " + (p.status_reason or "")
-                                                        if p.status else "not screened")})
+            why = (p.excluded_reason or ("beyond the reading-list limit" if p.extra.get("beyond_list_limit") else None)
+                   or ("screened out: " + (p.status_reason or "") if p.status else "not screened"))
+            missed.append({"title": p.title, "id": p.id, "why": why})
     return {
         "review_included": total,
         "review_screened": len(rows),
