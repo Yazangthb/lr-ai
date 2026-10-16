@@ -94,3 +94,39 @@ def test_apply_logs_estimated_usage(make_run):
     u = run.runlog()[-1]["usage"]
     assert u["batches"] == 1 and u["papers"] == 2 and u["input_tokens_est"] > u["output_tokens_est"] > 0
     assert u["wall_minutes"] >= 0 and u["source"].startswith("estimate")
+
+
+def test_anthropic_provider_uses_the_official_api_and_logs_tokens_and_cost(make_run, monkeypatch):
+    import types
+
+    import anthropic
+    run = make_run()
+    papers = [paper(f"Paper number {i} on citation forecasting", doi=f"10.1/{i}") for i in range(2)]
+    (batch,) = screening.write_batches(run, "screen", papers, size=10)
+    seen = {}
+
+    class FakeMessages:
+        def create(self, **kw):
+            seen.update(kw)
+            text = "\n".join(json.dumps({"id": f"doi:10.1/{i}", "status": "skim", "reason": "r"}) for i in range(2))
+            usage = types.SimpleNamespace(input_tokens=1000, output_tokens=200, cache_creation_input_tokens=0,
+                                          cache_read_input_tokens=0)
+            return types.SimpleNamespace(content=[types.SimpleNamespace(type="text", text=text)], usage=usage,
+                                         stop_reason="end_turn")
+
+    class FakeClient:
+        def __init__(self, **kw):
+            seen["client"] = kw
+            self.messages = FakeMessages()
+
+    monkeypatch.setattr(anthropic, "Anthropic", FakeClient)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-123")
+    monkeypatch.setenv("ANTHROPIC_BASE_URL", "http://claude-code-proxy.invalid")
+    cli.main(["screen", "--run", run.path, "--provider", "anthropic", "--model", "claude-sonnet-4-6"])
+    assert seen["client"]["base_url"] == "https://api.anthropic.com"  # never the Claude Code proxy
+    assert seen["model"] == "claude-sonnet-4-6" and "temperature" not in seen and "thinking" not in seen
+    usage = [json.loads(x) for x in open(os.path.join(run.file("screen"), "usage.jsonl"), encoding="utf-8")]
+    assert usage[0]["returned"] == 2 and usage[0]["stop_reason"] == "end_turn"
+    assert usage[0]["cost"] == pytest.approx((1000 * 3.0 + 200 * 15.0) / 1e6)
+    with open(read_meta(batch)["output"], encoding="utf-8") as f:
+        assert len(f.readlines()) == 2

@@ -1,4 +1,5 @@
-"""Screen batch files through any OpenAI-compatible chat API (OpenRouter, OpenAI, a local server), with the same
+"""Screen batch files through any OpenAI-compatible chat API (OpenRouter, OpenAI, Yandex, a local server) or
+Anthropic's Messages API (`--provider anthropic`), with the same
 prompt the Claude Code `paper-screener` agent uses (agents/paper-screener.md), so models can be compared on the
 same batches. Result files are written where the agent would write them; `lr.py apply --model ...` merges them.
 
@@ -20,6 +21,15 @@ PROVIDERS = {
     "openai": {"base_url": "https://api.openai.com/v1", "key_env": "OPENAI_API_KEY"},
     # Yandex Cloud AI Studio; model ids are URIs with the cloud folder, e.g. gpt://<folder>/gpt-oss-120b
     "yandex": {"base_url": "https://llm.api.cloud.yandex.net/v1", "key_env": "YANDEX_API_KEY"},
+    # Anthropic's own Messages API through the official SDK (not an OpenAI-compatible endpoint). The base URL is set
+    # explicitly so a Claude Code environment's ANTHROPIC_BASE_URL never redirects the request.
+    "anthropic": {"base_url": "https://api.anthropic.com", "key_env": "ANTHROPIC_API_KEY"},
+}
+# USD per 1M tokens: input, output, cache write (5 min), cache read; list prices of 16 Oct 2026, prompts up to 100K
+ANTHROPIC_PRICES = {
+    "claude-fable-5-1": (10.0, 50.0, 12.5, 0.25), "claude-opus-5-5": (4.0, 20.0, 5.0, 0.20),
+    "claude-sonnet-5-5": (2.0, 10.0, 2.5, 0.20), "claude-sonnet-4-6": (3.0, 15.0, 3.75, 0.30),
+    "claude-haiku-5-5": (0.10, 0.50, 0.125, 0.01), "claude-haiku-4-5": (1.0, 5.0, 1.25, 0.10),
 }
 USAGE_FILE = "usage.jsonl"  # one line per API call or per applied result file, in the stage folder
 _FRONTMATTER = re.compile(r"^---\n.*?\n---\n", re.S)
@@ -69,6 +79,34 @@ def _chat(base_url: str, key: str, model: str, system: str, user: str, timeout: 
     return reply, d.get("usage") or {}
 
 
+def _chat_anthropic(base_url: str, key: str, model: str, system: str, user: str, timeout: float) -> tuple[str, dict]:
+    """One Messages API call with the model's default settings (no sampling or thinking options, which several current
+    models reject or fix). No refusal fallback: an experiment must not switch models silently, so a refusal is
+    reported and its papers stay pending."""
+    try:
+        import anthropic
+    except ImportError:
+        raise SystemExit("--provider anthropic needs the anthropic package: pip install anthropic") from None
+    client = anthropic.Anthropic(api_key=key, base_url=base_url, timeout=timeout, max_retries=4)
+    try:
+        msg = client.messages.create(model=model, max_tokens=16000, system=system,
+                                     messages=[{"role": "user", "content": user}])
+    except (anthropic.AuthenticationError, anthropic.PermissionDeniedError, anthropic.NotFoundError,
+            anthropic.BadRequestError) as e:
+        raise http.HttpError(getattr(e, "status_code", None), f"Anthropic API: {e.message}", persistent=True) from None
+    except anthropic.APIError as e:  # rate limits, server and connection errors left after the SDK's retries
+        raise http.HttpError(getattr(e, "status_code", None), f"Anthropic API: {e}") from None
+    reply = "".join(b.text for b in msg.content if b.type == "text")
+    u = msg.usage
+    cw, cr = (u.cache_creation_input_tokens or 0), (u.cache_read_input_tokens or 0)
+    usage = {"prompt_tokens": u.input_tokens + cw + cr, "completion_tokens": u.output_tokens,
+             "stop_reason": msg.stop_reason}
+    price = ANTHROPIC_PRICES.get(model)
+    if price:
+        usage["cost"] = (u.input_tokens * price[0] + u.output_tokens * price[1] + cw * price[2] + cr * price[3]) / 1e6
+    return reply, usage
+
+
 def screen_batches(run, batches: list[str], provider: str, model: str, base_url: str | None = None,
                    key_env: str | None = None, timeout: float = 300.0, say=print) -> dict:
     """Screen each batch file that has no result file yet. Papers a reply leaves out are asked for once more in
@@ -102,7 +140,8 @@ def screen_batches(run, batches: list[str], provider: str, model: str, base_url:
             user = "\n".join([lines[0]] + [json.dumps(r, ensure_ascii=False) for r in todo])
             t0 = time.monotonic()
             try:
-                reply, usage = _chat(base_url, key, model, system, user, timeout)
+                chat = _chat_anthropic if provider == "anthropic" else _chat
+                reply, usage = chat(base_url, key, model, system, user, timeout)
             except http.HttpError as e:
                 say(f"  {meta['batch']}: {e}")
                 if e.persistent:
@@ -115,7 +154,7 @@ def screen_batches(run, batches: list[str], provider: str, model: str, base_url:
                      "provider": provider, "model": model, "papers": len(todo), "returned": len(new),
                      "seconds": round(secs, 1), "prompt_tokens": usage.get("prompt_tokens"),
                      "completion_tokens": usage.get("completion_tokens"), "cost": usage.get("cost"),
-                     "source": "api"}
+                     "source": "api", **({"stop_reason": usage["stop_reason"]} if "stop_reason" in usage else {})}
             with open(usage_path, "a", encoding="utf-8") as f:
                 f.write(json.dumps(entry) + "\n")
             for k in ("prompt_tokens", "completion_tokens", "cost"):
