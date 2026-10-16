@@ -118,6 +118,7 @@ def test_anthropic_provider_uses_the_official_api_and_logs_tokens_and_cost(make_
         def __init__(self, **kw):
             seen["client"] = kw
             self.messages = FakeMessages()
+            self.messages.stream = lambda **kw: _FakeStream(self.messages.create(**kw))
 
     monkeypatch.setattr(anthropic, "Anthropic", FakeClient)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-123")
@@ -142,7 +143,7 @@ def test_effort_is_sent_and_recorded(make_run, monkeypatch):
 
     class FakeClient:
         def __init__(self, **kw):
-            self.messages = types.SimpleNamespace(create=self.create)
+            self.messages = types.SimpleNamespace(stream=lambda **kw: _FakeStream(self.create(**kw)))
 
         def create(self, **kw):
             seen.update(kw)
@@ -158,3 +159,17 @@ def test_effort_is_sent_and_recorded(make_run, monkeypatch):
     assert run.runlog()[-1]["effort"] == "max"
     usage = [json.loads(x) for x in open(os.path.join(run.file("screen"), "usage.jsonl"), encoding="utf-8")]
     assert usage[0]["effort"] == "max"
+
+
+class _FakeStream:
+    def __init__(self, msg):
+        self.msg = msg
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def get_final_message(self):
+        return self.msg

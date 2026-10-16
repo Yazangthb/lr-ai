@@ -94,8 +94,11 @@ def _chat_anthropic(base_url: str, key: str, model: str, system: str, user: str,
     client = anthropic.Anthropic(api_key=key, base_url=base_url, timeout=timeout, max_retries=4)
     try:
         extra = {"output_config": {"effort": effort}} if effort else None  # low | medium | high | xhigh | max
-        msg = client.messages.create(model=model, max_tokens=32000, system=system,
-                                     messages=[{"role": "user", "content": user}], extra_body=extra)
+        # Streaming, so the output limit can be the model's maximum: at high effort, thinking alone can use tens of
+        # thousands of tokens before the answer starts (Haiku 5.5 at max effort ran out at 32,000).
+        with client.messages.stream(model=model, max_tokens=128000, system=system,
+                                    messages=[{"role": "user", "content": user}], extra_body=extra) as stream:
+            msg = stream.get_final_message()
     except (anthropic.AuthenticationError, anthropic.PermissionDeniedError, anthropic.NotFoundError,
             anthropic.BadRequestError) as e:
         raise http.HttpError(getattr(e, "status_code", None), f"Anthropic API: {e.message}", persistent=True) from None
