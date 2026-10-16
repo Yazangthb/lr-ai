@@ -64,9 +64,12 @@ def parse_results(text: str, wanted: list[str]) -> dict[str, dict]:
     return found
 
 
-def _chat(base_url: str, key: str, model: str, system: str, user: str, timeout: float) -> tuple[str, dict]:
+def _chat(base_url: str, key: str, model: str, system: str, user: str, timeout: float,
+          effort: str | None = None) -> tuple[str, dict]:
     body = {"model": model, "temperature": 0,
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}
+    if effort:
+        body["reasoning_effort"] = effort
     if "openrouter.ai" in base_url:
         body["usage"] = {"include": True}  # report the cost; other servers may reject the field (Yandex's Qwen does)
     text = http.request(base_url.rstrip("/") + "/chat/completions", body=body, cache=False, timeout=timeout,
@@ -79,7 +82,8 @@ def _chat(base_url: str, key: str, model: str, system: str, user: str, timeout: 
     return reply, d.get("usage") or {}
 
 
-def _chat_anthropic(base_url: str, key: str, model: str, system: str, user: str, timeout: float) -> tuple[str, dict]:
+def _chat_anthropic(base_url: str, key: str, model: str, system: str, user: str, timeout: float,
+                    effort: str | None = None) -> tuple[str, dict]:
     """One Messages API call with the model's default settings (no sampling or thinking options, which several current
     models reject or fix). No refusal fallback: an experiment must not switch models silently, so a refusal is
     reported and its papers stay pending."""
@@ -89,8 +93,9 @@ def _chat_anthropic(base_url: str, key: str, model: str, system: str, user: str,
         raise SystemExit("--provider anthropic needs the anthropic package: pip install anthropic") from None
     client = anthropic.Anthropic(api_key=key, base_url=base_url, timeout=timeout, max_retries=4)
     try:
-        msg = client.messages.create(model=model, max_tokens=16000, system=system,
-                                     messages=[{"role": "user", "content": user}])
+        extra = {"output_config": {"effort": effort}} if effort else None  # low | medium | high | xhigh | max
+        msg = client.messages.create(model=model, max_tokens=32000, system=system,
+                                     messages=[{"role": "user", "content": user}], extra_body=extra)
     except (anthropic.AuthenticationError, anthropic.PermissionDeniedError, anthropic.NotFoundError,
             anthropic.BadRequestError) as e:
         raise http.HttpError(getattr(e, "status_code", None), f"Anthropic API: {e.message}", persistent=True) from None
@@ -108,7 +113,7 @@ def _chat_anthropic(base_url: str, key: str, model: str, system: str, user: str,
 
 
 def screen_batches(run, batches: list[str], provider: str, model: str, base_url: str | None = None,
-                   key_env: str | None = None, timeout: float = 300.0, say=print) -> dict:
+                   key_env: str | None = None, timeout: float = 300.0, effort: str | None = None, say=print) -> dict:
     """Screen each batch file that has no result file yet. Papers a reply leaves out are asked for once more in
     a second call; any still missing stay pending (apply reports them). Returns totals for the run log."""
     preset = PROVIDERS.get(provider, {})
@@ -141,7 +146,7 @@ def screen_batches(run, batches: list[str], provider: str, model: str, base_url:
             t0 = time.monotonic()
             try:
                 chat = _chat_anthropic if provider == "anthropic" else _chat
-                reply, usage = chat(base_url, key, model, system, user, timeout)
+                reply, usage = chat(base_url, key, model, system, user, timeout, effort)
             except http.HttpError as e:
                 say(f"  {meta['batch']}: {e}")
                 if e.persistent:
@@ -151,7 +156,7 @@ def screen_batches(run, batches: list[str], provider: str, model: str, base_url:
             new = parse_results(reply, [r["id"] for r in todo])
             got.update(new)
             entry = {"time": time.strftime("%Y-%m-%dT%H:%M:%S"), "batch": meta["batch"], "attempt": attempt,
-                     "provider": provider, "model": model, "papers": len(todo), "returned": len(new),
+                     "provider": provider, "model": model, "effort": effort, "papers": len(todo), "returned": len(new),
                      "seconds": round(secs, 1), "prompt_tokens": usage.get("prompt_tokens"),
                      "completion_tokens": usage.get("completion_tokens"), "cost": usage.get("cost"),
                      "source": "api", **({"stop_reason": usage["stop_reason"]} if "stop_reason" in usage else {})}

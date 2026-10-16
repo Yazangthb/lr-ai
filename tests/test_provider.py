@@ -130,3 +130,31 @@ def test_anthropic_provider_uses_the_official_api_and_logs_tokens_and_cost(make_
     assert usage[0]["cost"] == pytest.approx((1000 * 3.0 + 200 * 15.0) / 1e6)
     with open(read_meta(batch)["output"], encoding="utf-8") as f:
         assert len(f.readlines()) == 2
+
+
+def test_effort_is_sent_and_recorded(make_run, monkeypatch):
+    import types
+
+    import anthropic
+    run = make_run()
+    screening.write_batches(run, "screen", [paper("A paper on citation forecasting", doi="10.1/0")], size=10)
+    seen = {}
+
+    class FakeClient:
+        def __init__(self, **kw):
+            self.messages = types.SimpleNamespace(create=self.create)
+
+        def create(self, **kw):
+            seen.update(kw)
+            usage = types.SimpleNamespace(input_tokens=10, output_tokens=5, cache_creation_input_tokens=0,
+                                          cache_read_input_tokens=0)
+            return types.SimpleNamespace(content=[types.SimpleNamespace(type="text", text='{"id": "doi:10.1/0", '
+                                         '"status": "core", "reason": "r"}')], usage=usage, stop_reason="end_turn")
+
+    monkeypatch.setattr(anthropic, "Anthropic", FakeClient)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "k")
+    cli.main(["screen", "--run", run.path, "--provider", "anthropic", "--model", "claude-haiku-5-5", "--effort", "max"])
+    assert seen["extra_body"] == {"output_config": {"effort": "max"}}
+    assert run.runlog()[-1]["effort"] == "max"
+    usage = [json.loads(x) for x in open(os.path.join(run.file("screen"), "usage.jsonl"), encoding="utf-8")]
+    assert usage[0]["effort"] == "max"

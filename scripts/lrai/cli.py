@@ -400,12 +400,12 @@ def cmd_screen(args) -> None:
         return
     print(f"Screening {len(todo)} batches with {args.provider}:{args.model} ...")
     t = provider.screen_batches(run, todo, args.provider, args.model, base_url=args.base_url,
-                                key_env=args.key_env, timeout=args.timeout)
+                                key_env=args.key_env, timeout=args.timeout, effort=args.effort)
     name = f"{args.provider}/{args.model}"
     summary = (f"{t['screened']} of {t['papers']} papers screened by {name} in {t['batches']} batches; "
                f"{t['prompt_tokens']:,} input + {t['completion_tokens']:,} output tokens, "
                f"${t['cost']:.4f}, {t['seconds'] / 60:.1f} min")
-    run.log("screen", summary, provider=args.provider, model=args.model, base_url=args.base_url, **t)
+    run.log("screen", summary, provider=args.provider, model=args.model, base_url=args.base_url, effort=args.effort, **t)
     print(summary)
     if t["failed"]:
         print("Batches without results (re-run the command to retry): " + ", ".join(t["failed"]))
@@ -876,6 +876,8 @@ def build_parser() -> argparse.ArgumentParser:
                    "OPENAI_API_KEY, YANDEX_API_KEY or LLM_API_KEY)")
     p.add_argument("--batches", help="only these batches, e.g. batch_001,batch_002")
     p.add_argument("--timeout", type=float, default=300.0, help="seconds per API call")
+    p.add_argument("--effort", choices=["low", "medium", "high", "xhigh", "max"],
+                   help="reasoning effort (default: the model's own default); recorded per call")
 
     p = cmd("apply", cmd_apply, "Merge new subagent result files into papers.jsonl (manual `set` edits win).")
     p.add_argument("--stage", choices=screening.STAGES, required=True)
