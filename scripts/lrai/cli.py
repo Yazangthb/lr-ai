@@ -417,19 +417,50 @@ def _max_list(run) -> int | None:
     return int(value) if value else None
 
 
+def _rank_method(run) -> str:
+    return str(run.config["screening"].get("rank") or "links")
+
+
+def _finalized(run) -> bool:
+    return any(e.get("stage") == "finalize" for e in run.runlog())
+
+
 def _relimit(run, papers) -> None:
-    """Keep the reading-list cut current after filters or new screening results change the screened-in set."""
-    if screening.is_finalized(papers):
-        screening.limit_list(papers, _max_list(run))
+    """Keep the ranking and the reading-list cut current after filters or new screening change the screened-in set."""
+    if _finalized(run):
+        screening.limit_list(papers, _max_list(run), _rank_method(run))
+    elif any("list_rank" in p.extra for p in papers):
+        screening.limit_list(papers, None, _rank_method(run))
+
+
+def cmd_rank(args) -> None:
+    run = _run(args)
+    papers = run.load()
+    method = args.method or _rank_method(run)
+    if args.method and args.method != _rank_method(run):
+        path = run.file("config.yaml")
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(cfgmod.set_values(text, "screening", {"rank": method}))
+        run.config = cfgmod.load(path)
+    limit = _max_list(run) if _finalized(run) else None
+    r = screening.limit_list(papers, limit, method)
+    run.save(papers)
+    summary = f"ranked {r['screened_in']} screened-in papers by {method}" + (
+        f"; reading list {r['list']} (limit {limit})" if limit else "; run `finalize` to cut the list")
+    run.log("rank", summary, **r)
+    print(summary[0].upper() + summary[1:] + ".")
 
 
 def cmd_finalize(args) -> None:
     run = _run(args)
     papers = run.load()
     limit = (args.max or None) if args.max is not None else _max_list(run)
-    r = screening.limit_list(papers, limit)
+    r = screening.limit_list(papers, limit, _rank_method(run))
     run.save(papers)
-    summary = (f"reading list: {r['list']} of {r['screened_in']} screened-in papers ({r['core']} core, {r['skim']} skim)"
+    summary = (f"reading list: {r['list']} of {r['screened_in']} screened-in papers ({r['core']} core, {r['skim']} skim; "
+               f"ranked by {r['rank_method']})"
                + (f"; {r['beyond_limit']} beyond the {limit}-paper limit" if r["beyond_limit"] else "")
                + ("" if limit else "; no limit"))
     run.log("finalize", summary, **r)
@@ -852,8 +883,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--model", help="model that produced these results, recorded per paper and in the log "
                    "(e.g. claude-haiku-5-5)")
 
-    p = cmd("finalize", cmd_finalize, "Last step: cut the reading list to the best N screened-in papers (core first, "
-            "then by relevance). Papers below the cut keep their decision and are marked, not deleted.")
+    p = cmd("rank", cmd_rank, "Order the screened-in papers for the reading list: links (default: core first, then "
+            "papers linked to more included papers, then relevance) or relevance (core first, then relevance score).")
+    p.add_argument("--method", choices=screening.RANK_METHODS, help="saved to screening.rank in config.yaml")
+
+    p = cmd("finalize", cmd_finalize, "Last step: cut the reading list to the best N screened-in papers in the order "
+            "set by `rank` (screening.rank). Papers below the cut keep their decision and are marked, not deleted.")
     p.add_argument("--max", type=int, help="list size (default: screening.max_list, 300); 0 = no limit")
 
     p = cmd("show", cmd_show, "List papers (filter with --where key=value).")

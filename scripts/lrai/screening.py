@@ -207,18 +207,41 @@ def _still_pending(p: Paper, stage: str) -> bool:
 
 
 _LIST_ORDER = {"core": 0, "skim": 1}
+RANK_METHODS = ("links", "relevance")
 
 
-def list_order(p: Paper) -> tuple:
-    """Reading order of screened-in papers: core before skim, then by relevance (highest first), then id."""
-    return (_LIST_ORDER[p.status], -(p.relevance if p.relevance is not None else 0.0), p.id)
+def link_counts(papers: list[Paper]) -> dict[str, int]:
+    """For each screened-in paper, how many other screened-in papers cite it or are cited by it, from the
+    snowballing routes (a route names its parent by any of its identifiers)."""
+    screened = [p for p in papers if p.screened_in]
+    owner = {}
+    for p in screened:
+        for key in (p.id, *(k for k in p.dedup_keys() if not k.startswith("title:"))):
+            owner[key] = p.id
+    counts = {}
+    for p in screened:
+        parents = {owner.get(v.split(":", 1)[1]) for v in p.found_via if v.startswith(("backward:", "forward:"))}
+        counts[p.id] = len(parents - {None, p.id})
+    return counts
 
 
-def limit_list(papers: list[Paper], max_papers: int | None) -> dict:
-    """Cut the reading list to the first `max_papers` screened-in papers in reading order. Papers below the cut keep
-    their screening decision and are marked extra["beyond_list_limit"]; every screened-in paper gets its position in
-    extra["list_rank"]. `max_papers` None or 0 removes the limit."""
-    ranked = sorted((p for p in papers if p.screened_in), key=list_order)
+def list_order(p: Paper, method: str = "relevance", links: dict[str, int] | None = None) -> tuple:
+    """Reading order of screened-in papers: core before skim; then, for `links`, papers linked to more screened-in
+    papers first; then by relevance (highest first); then id. `relevance` skips the link step."""
+    rel = -(p.relevance if p.relevance is not None else 0.0)
+    if method == "links":
+        return (_LIST_ORDER[p.status], -(links or {}).get(p.id, 0), rel, p.id)
+    return (_LIST_ORDER[p.status], rel, p.id)
+
+
+def limit_list(papers: list[Paper], max_papers: int | None, method: str = "relevance") -> dict:
+    """Rank the screened-in papers by `method` (position in extra["list_rank"]) and cut the reading list to the first
+    `max_papers`. Papers below the cut keep their screening decision and are marked extra["beyond_list_limit"].
+    `max_papers` None or 0 removes the limit."""
+    if method not in RANK_METHODS:
+        raise ValueError(f"unknown ranking method {method!r}; choose from {', '.join(RANK_METHODS)}")
+    links = link_counts(papers) if method == "links" else None
+    ranked = sorted((p for p in papers if p.screened_in), key=lambda p: list_order(p, method, links))
     for p in papers:
         p.extra.pop("beyond_list_limit", None)
         if not p.screened_in:
@@ -230,8 +253,4 @@ def limit_list(papers: list[Paper], max_papers: int | None) -> dict:
     kept = ranked[:max_papers] if max_papers else ranked
     return {"screened_in": len(ranked), "list": len(kept), "core": sum(p.status == "core" for p in kept),
             "skim": sum(p.status == "skim" for p in kept), "beyond_limit": len(ranked) - len(kept),
-            "max_list": max_papers or None}
-
-
-def is_finalized(papers: list[Paper]) -> bool:
-    return any("list_rank" in p.extra for p in papers)
+            "max_list": max_papers or None, "rank_method": method}
