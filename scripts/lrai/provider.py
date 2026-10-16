@@ -82,6 +82,15 @@ def _chat(base_url: str, key: str, model: str, system: str, user: str, timeout: 
     return reply, d.get("usage") or {}
 
 
+def _stream_errors() -> tuple:
+    """Transport errors the HTTP library raises while a stream is being read (not wrapped by the SDK)."""
+    try:
+        import httpx
+        return (httpx.TransportError,)
+    except ImportError:
+        return ()
+
+
 def _chat_anthropic(base_url: str, key: str, model: str, system: str, user: str, timeout: float,
                     effort: str | None = None) -> tuple[str, dict]:
     """One Messages API call with the model's default settings (no sampling or thinking options, which several current
@@ -96,13 +105,21 @@ def _chat_anthropic(base_url: str, key: str, model: str, system: str, user: str,
         extra = {"output_config": {"effort": effort}} if effort else None  # low | medium | high | xhigh | max
         # Streaming, so the output limit can be the model's maximum: at high effort, thinking alone can use tens of
         # thousands of tokens before the answer starts (Haiku 5.5 at max effort ran out at 32,000).
-        with client.messages.stream(model=model, max_tokens=128000, system=system,
-                                    messages=[{"role": "user", "content": user}], extra_body=extra) as stream:
-            msg = stream.get_final_message()
+        msg = None
+        for attempt in range(3):  # a stream can drop mid-answer; the SDK retries only before the stream starts
+            try:
+                with client.messages.stream(model=model, max_tokens=128000, system=system,
+                                            messages=[{"role": "user", "content": user}], extra_body=extra) as stream:
+                    msg = stream.get_final_message()
+                break
+            except (anthropic.APIConnectionError, OSError, *_stream_errors()) as e:
+                if attempt == 2:
+                    raise http.HttpError(None, f"Anthropic API: connection lost ({type(e).__name__})") from None
+                time.sleep(10 * (attempt + 1))
     except (anthropic.AuthenticationError, anthropic.PermissionDeniedError, anthropic.NotFoundError,
             anthropic.BadRequestError) as e:
         raise http.HttpError(getattr(e, "status_code", None), f"Anthropic API: {e.message}", persistent=True) from None
-    except anthropic.APIError as e:  # rate limits, server and connection errors left after the SDK's retries
+    except anthropic.APIError as e:  # rate limits and server errors left after the SDK's retries
         raise http.HttpError(getattr(e, "status_code", None), f"Anthropic API: {e}") from None
     reply = "".join(b.text for b in msg.content if b.type == "text")
     u = msg.usage
